@@ -1,6 +1,18 @@
 package ua.personal.archive.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.outlined.DocumentScanner
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -43,15 +55,27 @@ fun MainScreen(
     onAdd: (String?) -> Unit,
     onBackup: () -> Unit,
     onSections: () -> Unit,
+    onScan: (String) -> Unit,
 ) {
     var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
     var folderCategory by rememberSaveable { mutableStateOf<String?>(null) }
     val cs = MaterialTheme.colorScheme
+    var pickScanSection by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = cs.background,
         floatingActionButton = {
-            if (tab == Tab.HOME || tab == Tab.FOLDERS) {
+            if (tab == Tab.HOME || tab == Tab.FOLDERS) Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // Сканер: спершу розділ (якщо відкрито розділ — одразу в нього), потім камера.
+                SmallFloatingActionButton(
+                    onClick = {
+                        val c = if (tab == Tab.FOLDERS) folderCategory else null
+                        if (c != null) onScan(c) else pickScanSection = true
+                    },
+                    containerColor = cs.secondaryContainer,
+                    contentColor = cs.onSecondaryContainer,
+                ) { Icon(Icons.Outlined.DocumentScanner, "Сканувати документ") }
+                Spacer(Modifier.height(12.dp))
                 FloatingActionButton(
                     onClick = { onAdd(if (tab == Tab.FOLDERS) folderCategory else null) },
                     shape = CircleShape,
@@ -94,5 +118,23 @@ fun MainScreen(
                 Tab.MORE -> MoreTab(onBackup)
             }
         }
+    }
+    if (pickScanSection) {
+        val sections = rememberSections()
+        AlertDialog(
+            onDismissRequest = { pickScanSection = false },
+            title = { Text("У який розділ сканувати?") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    sections.forEach { s ->
+                        TextButton(onClick = { pickScanSection = false; onScan(s.id) }, modifier = Modifier.fillMaxWidth()) {
+                            Text(s.title, modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { pickScanSection = false }) { Text("Скасувати") } },
+        )
     }
 }

@@ -70,7 +70,7 @@ import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun EditScreen(docId: String?, initialCategory: String? = null, sharedUris: List<Uri> = emptyList(), onDone: (String?) -> Unit, onBack: () -> Unit) {
+fun EditScreen(docId: String?, initialCategory: String? = null, autoScan: Boolean = false, sharedUris: List<Uri> = emptyList(), onDone: (String?) -> Unit, onBack: () -> Unit) {
     val app = LocalApp.current
     val repo = app.repo
     val scope = rememberCoroutineScope()
@@ -131,6 +131,22 @@ fun EditScreen(docId: String?, initialCategory: String? = null, sharedUris: List
         importUris(listOf(pdf), deleteAfter = DocScanner.localFile(pdf), name = n)
     }
     val activity = androidx.compose.ui.platform.LocalContext.current.findActivity()
+    fun startScan() {
+        val act = activity
+        if (act == null) { error = "Сканер недоступний"; return }
+        busy = true
+        DocScanner.start(act,
+            onReady = { sender ->
+                busy = false
+                app.lock.expectingExternalActivity = true
+                scanDoc.launch(IntentSenderRequest.Builder(sender).build())
+            },
+            onError = { msg -> busy = false; error = msg },
+        )
+    }
+    // Відкрито кнопкою «Сканувати» з головного екрана — одразу запускаємо камеру (лише раз).
+    var autoScanDone by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) { if (autoScan && !autoScanDone) { autoScanDone = true; startScan() } }
 
     val dirty = title != original?.title.orEmpty() || added.isNotEmpty() || category != defaultSection ||
         number != original?.number.orEmpty() || note != original?.note.orEmpty() || expiresAt != original?.expiresAt ||
@@ -221,18 +237,7 @@ fun EditScreen(docId: String?, initialCategory: String? = null, sharedUris: List
             }
             OutlinedButton(
                 onClick = {
-                    val act = activity
-                    if (act == null) error = "Сканер недоступний" else {
-                    busy = true
-                    DocScanner.start(act,
-                        onReady = { sender ->
-                            busy = false
-                            app.lock.expectingExternalActivity = true
-                            scanDoc.launch(IntentSenderRequest.Builder(sender).build())
-                        },
-                        onError = { msg -> busy = false; error = msg },
-                    )
-                    }
+                    startScan()
                 },
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),

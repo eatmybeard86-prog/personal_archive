@@ -49,14 +49,16 @@ private fun Unlocked(app: ArchiveApp) {
                     onAdd = { c -> nav.navigate("edit?id=&cat=${c.orEmpty()}") },
                     onBackup = { nav.navigate("backup") },
                     onSections = { nav.navigate("sections") },
+                    onScan = { c -> nav.navigate("edit?id=&cat=$c&scan=1") },
                 )
             }
             composable(
-                "edit?id={id}&cat={cat}&shared={shared}",
+                "edit?id={id}&cat={cat}&shared={shared}&scan={scan}",
                 arguments = listOf(
                     navArgument("id") { type = NavType.StringType; defaultValue = "" },
                     navArgument("cat") { type = NavType.StringType; defaultValue = "" },
                     navArgument("shared") { type = NavType.StringType; defaultValue = "" },
+                    navArgument("scan") { type = NavType.StringType; defaultValue = "" },
                 ),
             ) {
                 val shared = remember {
@@ -66,6 +68,7 @@ private fun Unlocked(app: ArchiveApp) {
                     sharedUris = shared,
                     docId = it.arguments?.getString("id").orEmpty().ifBlank { null },
                     initialCategory = it.arguments?.getString("cat")?.ifBlank { null },
+                    autoScan = it.arguments?.getString("scan") == "1",
                     onDone = { id ->
                         back()
                         if (id != null && nav.currentDestination?.route == "home") nav.navigate("doc/$id")
