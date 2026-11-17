@@ -1,5 +1,6 @@
 package ua.personal.archive.ui
 
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Switch
 import androidx.compose.foundation.BorderStroke
@@ -283,7 +284,7 @@ fun SecurityTab(onBackup: () -> Unit) {
 /** Вкладка «Більше»: оформлення, читалка, про додаток. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun MoreTab(onBackup: () -> Unit) {
+fun MoreTab(onBackup: () -> Unit, onReceive: () -> Unit = {}) {
     val app = LocalApp.current
     val mode by app.settings.themeMode.collectAsStateWithLifecycle()
     val palette by app.settings.palette.collectAsStateWithLifecycle()
@@ -294,6 +295,10 @@ fun MoreTab(onBackup: () -> Unit) {
             Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            Section("Передача документів") {
+                NavRow(Icons.Filled.QrCodeScanner, "Отримати документ", "Відскануйте QR-код з іншого телефона (в одній мережі Wi-Fi)", onReceive)
+            }
+
             Section("Тема оформлення") {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ThemeMode.entries.forEach { m ->

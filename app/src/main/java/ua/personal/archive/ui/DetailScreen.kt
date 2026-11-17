@@ -1,5 +1,6 @@
 package ua.personal.archive.ui
 
+import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -74,6 +75,7 @@ fun DetailScreen(docId: String, onBack: () -> Unit, onEdit: () -> Unit, onView: 
     var busy by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var sending by remember { mutableStateOf(false) }
 
     if (doc == null) {
         // Документ видалено — повертаємось до списку.
@@ -121,6 +123,7 @@ fun DetailScreen(docId: String, onBack: () -> Unit, onEdit: () -> Unit, onView: 
                         if (doc.favorite) Icon(Icons.Filled.Star, "Прибрати з обраного", tint = Color(0xFFFBBF24))
                         else Icon(Icons.Outlined.StarBorder, "Додати в обране")
                     }
+                    IconButton(onClick = { sending = true }) { Icon(Icons.Outlined.QrCode2, "Передати на інший телефон") }
                     IconButton(onClick = onEdit) { Icon(Icons.Outlined.Edit, "Редагувати") }
                     IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Outlined.Delete, "Видалити") }
                 },
@@ -197,6 +200,8 @@ fun DetailScreen(docId: String, onBack: () -> Unit, onEdit: () -> Unit, onView: 
             }
         }
     }
+
+    if (sending) SendDialog(doc) { sending = false }
 
     if (confirmDelete) {
         AlertDialog(

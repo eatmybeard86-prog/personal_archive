@@ -61,6 +61,7 @@ fun MainScreen(
     var folderCategory by rememberSaveable { mutableStateOf<String?>(null) }
     val cs = MaterialTheme.colorScheme
     var pickScanSection by remember { mutableStateOf(false) }
+    var receiving by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = cs.background,
@@ -115,10 +116,12 @@ fun MainScreen(
                 )
                 Tab.FOLDERS -> FoldersTab(folderCategory, { folderCategory = it }, onOpen, onSections)
                 Tab.SECURITY -> SecurityTab(onBackup)
-                Tab.MORE -> MoreTab(onBackup)
+                Tab.MORE -> MoreTab(onBackup, onReceive = { receiving = true })
             }
         }
     }
+    if (receiving) ReceiveDialog(onClose = { receiving = false }, onOpen = onOpen)
+
     if (pickScanSection) {
         val sections = rememberSections()
         AlertDialog(

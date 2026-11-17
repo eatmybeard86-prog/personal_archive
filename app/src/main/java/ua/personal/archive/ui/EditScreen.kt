@@ -1,5 +1,6 @@
 package ua.personal.archive.ui
 
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
@@ -216,7 +217,20 @@ fun EditScreen(docId: String?, initialCategory: String? = null, autoScan: Boolea
             }
             if (app.repo.section(category).hint.isNotBlank()) Text(app.repo.section(category).hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-            OutlinedTextField(number, { number = it }, label = { Text("Номер / серія") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            OutlinedTextField(
+                number, { number = it }, label = { Text("Номер / серія") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    // Сканер QR / штрихкоду: номер полісу, рахунку тощо. Якщо номер уже є — код іде в нотатки.
+                    IconButton(onClick = {
+                        app.lock.expectingExternalActivity = true
+                        scanCode(ctx, onResult = { code ->
+                            if (number.isBlank()) number = code
+                            else note = listOf(note.trimEnd(), "Код: $code").filter { it.isNotEmpty() }.joinToString("\n")
+                        }, onError = { error = it })
+                    }) { Icon(Icons.Outlined.QrCodeScanner, "Сканувати QR або штрихкод") }
+                },
+            )
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(onClick = { pickDate = true }) {
