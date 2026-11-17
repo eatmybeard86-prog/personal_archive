@@ -56,7 +56,7 @@ class AppLock(
     /** Чи треба спершу налаштувати вхід (немає ні блокування екрана, ні пароля додатку). */
     fun needsSetup(): Boolean = when (settings.lockMethod.value) {
         LockMethod.DEVICE -> !deviceLockAvailable()
-        LockMethod.PASSWORD, LockMethod.PASSWORD_BIOMETRIC -> !password.isSet
+        else -> !password.isSet
     }
 
     fun usesPassword(): Boolean = settings.lockMethod.value != LockMethod.DEVICE
@@ -89,11 +89,12 @@ class AppLock(
             .setSubtitle("Підтвердіть, що це ви")
         when (method) {
             LockMethod.DEVICE -> builder.setAllowedAuthenticators(deviceAuthenticators)
-            LockMethod.PASSWORD_BIOMETRIC -> {
+            LockMethod.PASSWORD_BIOMETRIC, LockMethod.PIN_BIOMETRIC -> {
                 if (!biometricAvailable()) return false
-                builder.setAllowedAuthenticators(BIOMETRIC_STRONG).setNegativeButtonText("Ввести пароль")
+                builder.setAllowedAuthenticators(BIOMETRIC_STRONG)
+                    .setNegativeButtonText(if (method.numeric) "Ввести PIN" else "Ввести пароль")
             }
-            LockMethod.PASSWORD -> return false
+            LockMethod.PASSWORD, LockMethod.PIN -> return false
         }
         val prompt = BiometricPrompt(activity, ContextCompat.getMainExecutor(activity), object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {

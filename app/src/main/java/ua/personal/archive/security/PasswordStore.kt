@@ -16,7 +16,11 @@ class PasswordStore(context: Context) {
 
     val isSet: Boolean get() = prefs.contains("hash")
 
+    /** Збережений секрет — числовий PIN (а не пароль). */
+    val isNumeric: Boolean get() = prefs.getBoolean("numeric", false)
+
     fun set(password: CharArray) {
+        prefs.edit().putBoolean("numeric", password.isNotEmpty() && password.all { it.isDigit() }).apply()
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
         prefs.edit()
             .putString("salt", b64(salt))
@@ -29,7 +33,7 @@ class PasswordStore(context: Context) {
 
     fun clear() {
         // Тривожний PIN зберігаємо окремо — він не залежить від основного пароля.
-        prefs.edit().remove("salt").remove("hash").remove("iter").remove("fails").remove("blocked_until").apply()
+        prefs.edit().remove("numeric").remove("salt").remove("hash").remove("iter").remove("fails").remove("blocked_until").apply()
     }
 
     // ── «Тривожний» PIN: відкриває окреме порожнє сховище ──────────────────────
@@ -121,5 +125,6 @@ class PasswordStore(context: Context) {
     companion object {
         private const val ITERATIONS = 210_000
         const val MIN_LENGTH = 6
+        const val MIN_PIN = 4
     }
 }

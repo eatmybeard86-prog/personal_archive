@@ -83,10 +83,10 @@ fun LockScreen(activity: FragmentActivity) {
                         lock.expectingExternalActivity = true
                         runCatching { activity.startActivity(AppLock.securitySettingsIntent()) }
                     },
-                    onUsePassword = { app.settings.setLockMethod(LockMethod.PASSWORD) },
+                    onUsePassword = { app.settings.setLockMethod(LockMethod.PIN) },
                     onRetry = { refresh++ },
                 )
-                needsSetup -> PasswordSetup(onDone = { pwd ->
+                needsSetup -> PasswordSetup(numeric = method.numeric, title = if (method.numeric) "Створіть PIN-код для входу" else "Створіть пароль для входу", onDone = { pwd ->
                     lock.password.set(pwd)
                     pwd.fill('\u0000')
                     lock.unlockedBySetup()
@@ -109,12 +109,15 @@ fun LockScreen(activity: FragmentActivity) {
                                 onSubmit = { tryUnlock(it) },
                                 waitMs = { lock.password.waitMs() },
                                 label = "PIN",
+                                numeric = true,
                             )
                         }
                     }
                 }
                 else -> PasswordEntry(
-                    biometric = method == LockMethod.PASSWORD_BIOMETRIC && lock.biometricAvailable(),
+                    biometric = method.biometric && lock.biometricAvailable(),
+                    label = if (lock.password.isNumeric) "PIN" else "Пароль",
+                    numeric = lock.password.isNumeric,
                     onBiometric = { lock.promptSystem(activity) { error = it } },
                     onSubmit = { tryUnlock(it) },
                     waitMs = { lock.password.waitMs() },
@@ -142,14 +145,15 @@ private fun NoDeviceLock(onOpenSettings: () -> Unit, onUsePassword: () -> Unit, 
 }
 
 @Composable
-fun PasswordSetup(onDone: (CharArray) -> Unit, title: String = "Створіть пароль для входу") {
+fun PasswordSetup(onDone: (CharArray) -> Unit, title: String = "Створіть пароль для входу", numeric: Boolean = false) {
     var p1 by remember { mutableStateOf("") }
     var p2 by remember { mutableStateOf("") }
     var err by remember { mutableStateOf<String?>(null) }
     fun submit() {
         err = when {
-            p1.length < PasswordStore.MIN_LENGTH -> "Мінімум ${PasswordStore.MIN_LENGTH} символів"
-            p1 != p2 -> "Паролі не збігаються"
+            numeric && (p1.length < PasswordStore.MIN_PIN || !p1.all { it.isDigit() }) -> "PIN — щонайменше ${PasswordStore.MIN_PIN} цифри"
+            !numeric && p1.length < PasswordStore.MIN_LENGTH -> "Мінімум ${PasswordStore.MIN_LENGTH} символів"
+            p1 != p2 -> if (numeric) "PIN-коди не збігаються" else "Паролі не збігаються"
             else -> null
         }
         if (err == null) onDone(p1.toCharArray()).also { p1 = ""; p2 = "" }
@@ -157,13 +161,13 @@ fun PasswordSetup(onDone: (CharArray) -> Unit, title: String = "Створіть
     Text(title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
     Spacer(Modifier.height(4.dp))
     Text(
-        "Відновити забутий пароль неможливо — запам'ятайте його.",
+        if (numeric) "Відновити забутий PIN неможливо — запам'ятайте його." else "Відновити забутий пароль неможливо — запам'ятайте його.",
         style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center,
     )
     Spacer(Modifier.height(16.dp))
-    PasswordField(p1, { p1 = it }, "Пароль", ImeAction.Next) {}
+    PasswordField(p1, { p1 = it }, if (numeric) "PIN-код" else "Пароль", ImeAction.Next, numeric = numeric) {}
     Spacer(Modifier.height(8.dp))
-    PasswordField(p2, { p2 = it }, "Повторіть пароль", ImeAction.Done) { submit() }
+    PasswordField(p2, { p2 = it }, if (numeric) "Повторіть PIN-код" else "Повторіть пароль", ImeAction.Done, numeric = numeric) { submit() }
     err?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     Spacer(Modifier.height(16.dp))
     Button(onClick = { submit() }, Modifier.fillMaxWidth()) { Text("Зберегти") }
@@ -176,6 +180,7 @@ private fun PasswordEntry(
     onSubmit: (CharArray) -> Boolean,
     waitMs: () -> Long,
     label: String = "Пароль",
+    numeric: Boolean = false,
 ) {
     var value by remember { mutableStateOf("") }
     var err by remember { mutableStateOf<String?>(null) }
@@ -192,7 +197,7 @@ private fun PasswordEntry(
         }
         value = ""
     }
-    PasswordField(value, { value = it; err = null }, label, ImeAction.Done, enabled = wait == 0L) { submit() }
+    PasswordField(value, { value = it; err = null }, label, ImeAction.Done, enabled = wait == 0L, numeric = numeric) { submit() }
     if (wait > 0) Text("Забагато спроб. Зачекайте ${wait / 1000 + 1} с", color = MaterialTheme.colorScheme.error)
     err?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     Spacer(Modifier.height(16.dp))
@@ -213,6 +218,7 @@ fun PasswordField(
     label: String,
     ime: ImeAction,
     enabled: Boolean = true,
+    numeric: Boolean = false,
     onIme: () -> Unit,
 ) {
     OutlinedTextField(
@@ -222,7 +228,7 @@ fun PasswordField(
         singleLine = true,
         enabled = enabled,
         visualTransformation = PasswordVisualTransformation(),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ime, autoCorrectEnabled = false),
+        keyboardOptions = KeyboardOptions(keyboardType = if (numeric) KeyboardType.NumberPassword else KeyboardType.Password, imeAction = ime, autoCorrectEnabled = false),
         keyboardActions = KeyboardActions(onAny = { onIme() }),
         modifier = Modifier.fillMaxWidth(),
     )

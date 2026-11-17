@@ -143,9 +143,9 @@ fun SecurityTab(onBackup: () -> Unit, onAccessLog: () -> Unit = {}) {
             decoy -> if (m != LockMethod.DEVICE) setPasswordFor = m else fakeMethod = m
             m == LockMethod.DEVICE && !lock.deviceLockAvailable() ->
                 message = "На пристрої не налаштовано блокування екрана чи біометрію. Спершу увімкніть їх у налаштуваннях Android."
-            m == LockMethod.PASSWORD_BIOMETRIC && !lock.biometricAvailable() ->
-                message = "На пристрої немає налаштованого відбитка чи обличчя. Можна вибрати просто «Пароль додатку»."
-            m != LockMethod.DEVICE && !lock.password.isSet -> setPasswordFor = m
+            m.biometric && !lock.biometricAvailable() ->
+                message = "На пристрої немає налаштованого відбитка чи обличчя. Можна вибрати просто «PIN-код додатку»."
+            m != LockMethod.DEVICE && (!lock.password.isSet || lock.password.isNumeric != m.numeric) -> setPasswordFor = m
             else -> app.settings.setLockMethod(m)
         }
     }
@@ -178,7 +178,7 @@ fun SecurityTab(onBackup: () -> Unit, onAccessLog: () -> Unit = {}) {
                 LockMethod.entries.forEach { m -> RadioRow(method == m, m.title, m.hint) { choose(m) } }
                 if (method != LockMethod.DEVICE) {
                     OutlinedButton(onClick = { setPasswordFor = method }) {
-                        Icon(Icons.Filled.Key, null); Spacer(Modifier.width(8.dp)); Text("Змінити пароль додатку")
+                        Icon(Icons.Filled.Key, null); Spacer(Modifier.width(8.dp)); Text(if (method.numeric) "Змінити PIN додатку" else "Змінити пароль додатку")
                     }
                 }
             }
@@ -273,8 +273,8 @@ fun SecurityTab(onBackup: () -> Unit, onAccessLog: () -> Unit = {}) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Мінімум 4 символи. Має відрізнятися від пароля додатку.", style = MaterialTheme.typography.bodySmall)
-                    PasswordField(pin, { pin = it; err = null }, "PIN", ImeAction.Next) {}
-                    PasswordField(pin2, { pin2 = it; err = null }, "Повторіть PIN", ImeAction.Done) {}
+                    PasswordField(pin, { pin = it; err = null }, "PIN", ImeAction.Next, numeric = true) {}
+                    PasswordField(pin2, { pin2 = it; err = null }, "Повторіть PIN", ImeAction.Done, numeric = true) {}
                     err?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },
@@ -307,7 +307,12 @@ fun SecurityTab(onBackup: () -> Unit, onAccessLog: () -> Unit = {}) {
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     PasswordSetup(
-                        title = if (lock.password.isSet) "Новий пароль додатку" else "Створіть пароль додатку",
+                        numeric = target.numeric,
+                        title = when {
+                            target.numeric -> if (lock.password.isSet) "Новий PIN-код додатку" else "Створіть PIN-код додатку"
+                            lock.password.isSet -> "Новий пароль додатку"
+                            else -> "Створіть пароль додатку"
+                        },
                         onDone = { pwd ->
                             if (decoy) {
                                 fakeMethod = target
@@ -317,7 +322,7 @@ fun SecurityTab(onBackup: () -> Unit, onAccessLog: () -> Unit = {}) {
                             }
                             pwd.fill('\u0000')
                             setPasswordFor = null
-                            message = "Пароль збережено."
+                            message = if (target.numeric) "PIN збережено." else "Пароль збережено."
                         },
                     )
                 }
