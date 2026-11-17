@@ -15,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -34,10 +35,12 @@ class ZoomState {
     fun reset() { scale = 1f; offset = Offset.Zero }
 
     fun transform(zoom: Float, pan: Offset, centroid: Offset, size: IntSize) {
+        if (!zoom.isFinite() || zoom <= 0f || !pan.x.isFinite() || !pan.y.isFinite()) return
         val newScale = (scale * zoom).coerceIn(1f, MAX)
         val k = newScale / scale
         // Точка під пальцями залишається на місці.
         val newOffset = centroid - (centroid - offset) * k + pan
+        if (!newOffset.x.isFinite() || !newOffset.y.isFinite()) return
         scale = newScale
         offset = clamp(newOffset, size)
     }
@@ -75,8 +78,13 @@ fun Modifier.zoomable(state: ZoomState): Modifier = this
             do {
                 val event = awaitPointerEvent()
                 val pressed = event.changes.count { it.pressed }
-                if (pressed > 1 || state.isZoomed) {
-                    state.transform(event.calculateZoom(), event.calculatePan(), event.calculateCentroid(useCurrent = true), size)
+                // Коли пальці відпускають, у події вже немає натиснутих точок і центр дорівнює
+                // Offset.Unspecified (NaN) — такий кадр пропускаємо, інакше сторінка зникала.
+                if (pressed > 0 && (pressed > 1 || state.isZoomed)) {
+                    val centroid = event.calculateCentroid(useCurrent = true)
+                    if (centroid.isSpecified) {
+                        state.transform(event.calculateZoom(), event.calculatePan(), centroid, size)
+                    }
                     event.changes.forEach { if (it.positionChanged()) it.consume() }
                 }
             } while (event.changes.any { it.pressed })

@@ -39,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -176,13 +177,15 @@ private fun Pages(doc: Document, theme: ReaderTheme) {
     val pager = rememberPagerState { pages.size }
     val zoomStates = remember(doc) { List(pages.size) { ZoomState() } }
     LaunchedEffect(pager.currentPage) { zoomStates.forEachIndexed { i, z -> if (i != pager.currentPage) z.reset() } }
+    // Лише «збільшено / ні», щоб екран не перебудовувався на кожен кадр щипка.
+    val zoomed by remember(doc) { derivedStateOf { zoomStates.getOrNull(pager.currentPage)?.isZoomed == true } }
     val widthPx = with(LocalDensity.current) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
     val filter = theme.composeFilter()
     Column(Modifier.fillMaxSize()) {
         HorizontalPager(
             state = pager,
             modifier = Modifier.weight(1f),
-            userScrollEnabled = !zoomStates[pager.currentPage].isZoomed,
+            userScrollEnabled = !zoomed,
             beyondViewportPageCount = 1,
         ) { index ->
             val page = pages[index]
