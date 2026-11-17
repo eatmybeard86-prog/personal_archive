@@ -114,6 +114,7 @@ fun ReceiveDialog(onClose: () -> Unit, onOpen: (String) -> Unit) {
         val o = offer ?: return@LaunchedEffect
         try {
             resultId = QrTransfer.receive(o, app.repo) { progress = it }
+            app.ocr.indexMissing()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

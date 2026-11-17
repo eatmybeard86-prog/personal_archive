@@ -43,6 +43,8 @@ data class Attachment(
     val mime: String,
     val size: Long,
     val addedAt: Long,
+    /** Розпізнаний текст скану/фото (OCR) — для пошуку. null — ще не розпізнавали. */
+    val text: String? = null,
 )
 
 @Serializable

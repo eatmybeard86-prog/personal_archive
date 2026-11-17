@@ -40,6 +40,7 @@ private fun Unlocked(app: ArchiveApp) {
             // Після розблокування прибираємо тимчасові розшифровані копії, якими вже поділилися.
             app.exporter.clearTemp()
             app.repo.load()
+            app.ocr.indexMissing()
         }
         val nav = rememberNavController()
         // Повернення назад ніколи не знімає головний екран (інакше лишається чорний порожній екран).

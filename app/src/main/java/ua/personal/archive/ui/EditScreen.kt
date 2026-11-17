@@ -175,6 +175,7 @@ fun EditScreen(docId: String?, initialCategory: String? = null, autoScan: Boolea
                 .copy(title = title.trim(), section = category, number = number.trim(), note = note.trim(), expiresAt = expiresAt, attachments = attachments.toList(), tags = parseTags(tagsText))
             try {
                 repo.save(doc)
+                app.ocr.indexMissing()
                 // Файли, які прибрали з документа, видаляються зі сховища.
                 val removed = original?.attachments.orEmpty().filter { o -> attachments.none { it.id == o.id } }
                 repo.discardAttachments(removed)

@@ -19,6 +19,8 @@ class ArchiveApp : Application() {
     lateinit var lock: AppLock
     val repo by lazy { VaultRepository(this) { VaultCrypto(this) } }
     val exporter by lazy { Exporter(this, repo) }
+    /** Фонове розпізнавання тексту в сканах для пошуку. */
+    val ocr by lazy { ua.personal.archive.ocr.OcrIndexer(this, repo) }
 
     /** Файли, отримані з інших додатків; забираються після розблокування. */
     val incoming = kotlinx.coroutines.flow.MutableStateFlow<List<android.net.Uri>>(emptyList())

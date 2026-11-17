@@ -135,6 +135,14 @@ class VaultRepository(private val context: Context, cryptoFactory: () -> VaultCr
         if (list.any { it.id == doc.id }) list.map { if (it.id == doc.id) updated else it } else list + updated
     }
 
+    /** Зберігає розпізнаний текст вкладення, не змінюючи дату редагування документа. */
+    suspend fun setAttachmentText(docId: String, attachmentId: String, text: String) = mutate { list ->
+        list.map { d ->
+            if (d.id != docId) d
+            else d.copy(attachments = d.attachments.map { if (it.id == attachmentId) it.copy(text = text) else it })
+        }
+    }
+
     suspend fun delete(docId: String) {
         val doc = find(docId) ?: return
         mutate { list -> list.filterNot { it.id == docId } }

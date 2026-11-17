@@ -77,7 +77,8 @@ fun FoldersTab(category: String?, onCategory: (String?) -> Unit, onOpen: (String
                 (!onlyFavorites || d.favorite) &&
                 (tag == null || d.tags.any { it.equals(tag, ignoreCase = true) }) &&
                 (q.isEmpty() || d.title.lowercase().contains(q) || d.number.lowercase().contains(q) ||
-                    d.note.lowercase().contains(q) || d.tags.any { it.lowercase().contains(q) } || d.attachments.any { it.name.lowercase().contains(q) })
+                    d.note.lowercase().contains(q) || d.tags.any { it.lowercase().contains(q) } ||
+                    d.attachments.any { it.text?.lowercase()?.contains(q) == true } || d.attachments.any { it.name.lowercase().contains(q) })
         }.sortedByDescending { it.updatedAt }
     }
     val expiring = remember(docs) { docs.count { it.expiresAt != null && daysLeft(it.expiresAt) <= 60 } }
@@ -96,7 +97,7 @@ fun FoldersTab(category: String?, onCategory: (String?) -> Unit, onOpen: (String
                 value = query,
                 onValueChange = { query = it },
                 leadingIcon = { Icon(Icons.Outlined.Search, null) },
-                placeholder = { Text("Пошук за назвою, номером, нотатками") },
+                placeholder = { Text("Пошук: назва, номер, теги, текст у сканах") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             )

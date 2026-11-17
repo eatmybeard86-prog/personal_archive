@@ -33,6 +33,15 @@ jobs:
             echo "::warning::Секрет SIGNING_KEYSTORE_BASE64 не задано — APK підписано тимчасовим ключем, оновлення поверх не встановиться."
           fi
 
+      # Мовні моделі для OCR (українська й англійська, «швидкі» версії Tesseract).
+      - name: Download OCR language data
+        run: |
+          mkdir -p app/src/main/assets/tessdata
+          for l in ukr eng; do
+            curl -sSfL -o app/src/main/assets/tessdata/$l.traineddata https://github.com/tesseract-ocr/tessdata_fast/raw/main/$l.traineddata
+          done
+          ls -la app/src/main/assets/tessdata
+
       - name: Test and build APK
         env:
           SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}

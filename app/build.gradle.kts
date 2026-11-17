@@ -87,6 +87,8 @@ dependencies {
     // Сканер QR-кодів і штрихкодів (без дозволу на камеру) та генерація QR для передачі документів.
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
     implementation("com.google.zxing:core:3.5.3")
+    // Розпізнавання тексту в сканах (українська + англійська), повністю на пристрої.
+    implementation("cz.adaptech.tesseract4android:tesseract4android:4.7.0")
 
     implementation("com.google.crypto.tink:tink-android:1.15.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
