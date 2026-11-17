@@ -12,6 +12,20 @@ import androidx.fragment.app.FragmentActivity
 
 /** Тихе фото фронтальною камерою після неправильного пароля (якщо увімкнено й дано дозвіл на камеру). */
 object IntruderCamera {
+    /**
+     * Надійніше фото: камера інколи ще не готова одразу після запуску — тоді пробуємо ще раз (до 3 спроб).
+     */
+    suspend fun captureReliable(activity: FragmentActivity): Pair<ByteArray, Int>? {
+        repeat(3) { attempt ->
+            val r = kotlinx.coroutines.suspendCancellableCoroutine<Pair<ByteArray, Int>?> { cont ->
+                capture(activity) { jpeg, rot -> if (cont.isActive) cont.resumeWith(Result.success(jpeg?.let { it to rot })) }
+            }
+            if (r != null) return r
+            kotlinx.coroutines.delay(1500L * (attempt + 1))
+        }
+        return null
+    }
+
     fun permitted(activity: FragmentActivity) =
         ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 

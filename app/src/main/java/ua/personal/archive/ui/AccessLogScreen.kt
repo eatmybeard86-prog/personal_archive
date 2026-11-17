@@ -66,7 +66,9 @@ fun AccessLogScreen(onBack: () -> Unit) {
     var big by remember { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(Unit) { log.load() }
     // У «тривожному» сховищі вхід тривожним PIN-ом виглядає як звичайний вхід.
-    val entries = if (decoy) all.map { if (it.kind == AccessLog.Kind.DURESS) it.copy(kind = AccessLog.Kind.UNLOCK) else it } else all
+    // Фото, зроблені після входу тривожним PIN-ом, у «тривожному» сховищі не показуються.
+    val entries = if (decoy) all.filterNot { it.kind == AccessLog.Kind.DURESS && it.photo }
+        .map { if (it.kind == AccessLog.Kind.DURESS) it.copy(kind = AccessLog.Kind.UNLOCK) else it } else all
     val fmt = remember { SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.ROOT) }
 
     Scaffold(

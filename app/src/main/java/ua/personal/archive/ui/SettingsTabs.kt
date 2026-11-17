@@ -230,7 +230,7 @@ fun SecurityTab(onBackup: () -> Unit, onAccessLog: () -> Unit = {}) {
                 }, verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Фото «зловмисника»")
-                        Text("Після неправильного пароля чи PIN — тихе фото фронтальною камерою (зашифроване)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Після неправильного пароля чи PIN — тихе фото фронтальною камерою; після входу тривожним PIN — 3 фото (одразу, через 10 і 30 с). Усе зашифровано", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(checked = intruder, onCheckedChange = {
                         if (!it) app.settings.setIntruderPhoto(false) else { lock.expectingExternalActivity = true; askCamera.launch(android.Manifest.permission.CAMERA) }

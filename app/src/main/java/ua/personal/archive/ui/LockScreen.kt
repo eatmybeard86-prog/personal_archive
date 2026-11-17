@@ -1,5 +1,6 @@
 package ua.personal.archive.ui
 
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -50,13 +51,15 @@ fun LockScreen(activity: FragmentActivity) {
     val method by app.settings.lockMethod.collectAsStateWithLifecycle()
     var error by remember { mutableStateOf<String?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
+    val photoScope = androidx.compose.runtime.rememberCoroutineScope()
     // Неправильний пароль → запис у журнал доступу, за бажанням — з фото фронтальною камерою.
     fun tryUnlock(input: CharArray): Boolean {
         val ok = lock.unlockWithPassword(input)
         if (!ok) {
-            if (app.settings.intruderPhoto.value) {
-                ua.personal.archive.security.IntruderCamera.capture(activity) { jpeg, rot ->
-                    app.accessLog.add(ua.personal.archive.security.AccessLog.Kind.WRONG, "пароль / PIN", jpeg, rot)
+            if (app.settings.intruderPhoto.value && ua.personal.archive.security.IntruderCamera.permitted(activity)) {
+                photoScope.launch {
+                    val p = ua.personal.archive.security.IntruderCamera.captureReliable(activity)
+                    app.accessLog.add(ua.personal.archive.security.AccessLog.Kind.WRONG, "пароль / PIN", p?.first, p?.second ?: 0)
                 }
             } else app.accessLog.add(ua.personal.archive.security.AccessLog.Kind.WRONG, "пароль / PIN")
         }

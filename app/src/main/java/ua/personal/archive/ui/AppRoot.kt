@@ -29,6 +29,16 @@ fun AppRoot(app: ArchiveApp, activity: FragmentActivity) {
             // Перемикаємо сховище ще до першого кадру, щоб дані іншого сховища не промайнули.
             remember(decoy) { app.repo.useVault(decoy); decoy }
             key(decoy) { Unlocked(app) }
+            // Вхід тривожним PIN-ом: тихі фото фронтальною камерою одразу, через 10 і через 30 секунд.
+            if (decoy) LaunchedEffect(Unit) {
+                if (!ua.personal.archive.security.IntruderCamera.permitted(activity)) return@LaunchedEffect
+                var last = 0L
+                for (at in listOf(0L, 10_000L, 30_000L)) {
+                    kotlinx.coroutines.delay(at - last); last = at
+                    val p = ua.personal.archive.security.IntruderCamera.captureReliable(activity) ?: continue
+                    app.accessLog.add(ua.personal.archive.security.AccessLog.Kind.DURESS, "фото через ${at / 1000} с після входу", p.first, p.second)
+                }
+            }
         }
     }
 }
