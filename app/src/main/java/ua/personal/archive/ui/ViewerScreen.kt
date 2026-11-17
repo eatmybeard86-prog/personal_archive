@@ -363,3 +363,58 @@ private fun TextPages(doc: Document, theme: ReaderTheme, scale: Float, onScale: 
         }
     }
 }
+
+
+/** Перегляд отриманої захищеної копії: кожне відкриття зараховується; файли живуть лише в тимчасовій теці. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CopyViewerScreen(copyId: String, onBack: () -> Unit) {
+    val app = LocalApp.current
+    var error by remember { mutableStateOf<String?>(null) }
+    val title = remember(copyId) { app.copies.items.value.firstOrNull { it.id == copyId }?.title ?: "Копія" }
+    val reader by produceState<Document?>(null, copyId) {
+        value = try {
+            withContext(Dispatchers.IO) {
+                val root = File(app.exporter.workDir, "copy-" + UUID.randomUUID()).apply { mkdirs() }
+                try {
+                    val files = app.copies.open(copyId, root)
+                    val pageKinds = files.all { (_, n, m) -> PdfConverter.kindOf(n, m).let { it == PdfConverter.Kind.PDF || it == PdfConverter.Kind.IMAGE } }
+                    if (files.size > 1 && pageKinds) {
+                        val parts = files.mapIndexed { i, (f, n, m) -> ReaderLoader.open(f, n, m, File(root, "p$i").apply { mkdirs() }) }
+                        CompositeDoc(title, parts, root)
+                    } else {
+                        val (f, n, m) = files.firstOrNull() ?: throw IllegalStateException("Копія порожня")
+                        ReaderLoader.open(f, n, m, root)
+                    }
+                } catch (e: Throwable) { root.deleteRecursively(); throw e }
+            }
+        } catch (e: Throwable) {
+            error = e.message ?: "Не вдалося відкрити копію"
+            null
+        }
+    }
+    DisposableEffect(reader) {
+        val opened = reader
+        onDispose { opened?.close() }
+    }
+    val theme = ReaderTheme.byName("DAY")
+    var textScale by remember { mutableFloatStateOf(1f) }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Назад") } },
+            )
+        },
+    ) { padding ->
+        Box(Modifier.padding(padding).fillMaxSize().background(Color(theme.outer)), contentAlignment = Alignment.Center) {
+            val r = reader
+            when {
+                error != null -> Text(error.orEmpty(), color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center, modifier = Modifier.padding(24.dp))
+                r == null -> CircularProgressIndicator()
+                r.paged -> Pages(r, theme)
+                else -> TextPages(r, theme, textScale) { textScale = it }
+            }
+        }
+    }
+}

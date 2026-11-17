@@ -53,7 +53,15 @@ private fun Unlocked(app: ArchiveApp) {
         val back: () -> Unit = { if (nav.previousBackStackEntry != null) nav.popBackStack() }
         val incoming by app.incoming.collectAsStateWithLifecycle()
         LaunchedEffect(incoming) {
-            if (incoming.isNotEmpty()) nav.navigate("edit?id=&cat=&shared=1")
+            if (incoming.isEmpty()) return@LaunchedEffect
+            // Захищена копія «.mydoc» відкривається окремо — у «Отримані копії», не в сховище.
+            val first = incoming.first()
+            val isCopy = incoming.size == 1 && kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { app.copies.isPack(app, first) }
+            if (isCopy) {
+                app.incoming.value = emptyList()
+                app.pendingCopy.value = first
+                nav.navigate("copies")
+            } else nav.navigate("edit?id=&cat=&shared=1")
         }
         NavHost(nav, startDestination = "home") {
             composable("home") {
@@ -65,6 +73,7 @@ private fun Unlocked(app: ArchiveApp) {
                     onScan = { c -> nav.navigate("edit?id=&cat=$c&scan=1") },
                     onAccessLog = { nav.navigate("accesslog") },
                     onBundle = { nav.navigate("bundle") },
+                    onCopies = { nav.navigate("copies") },
                 )
             }
             composable(
@@ -116,6 +125,8 @@ private fun Unlocked(app: ArchiveApp) {
                     show = true,
                 )
             }
+            composable("copies") { CopiesScreen(onBack = back, onOpen = { id -> nav.navigate("copyview/$id") }) }
+            composable("copyview/{id}") { CopyViewerScreen(it.arguments?.getString("id").orEmpty(), onBack = back) }
             composable("bundle") { BundleScreen(onBack = back) }
             composable("accesslog") { AccessLogScreen(onBack = back) }
             composable("backup") { BackupScreen(onBack = back) }

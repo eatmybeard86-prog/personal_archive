@@ -54,6 +54,9 @@
                 <data android:mimeType="application/rtf" />
                 <data android:mimeType="text/*" />
                 <data android:mimeType="image/*" />
+                <!-- Захищені копії «.mydoc» (месенджери надсилають їх як octet-stream). -->
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/x-mydoc" />
             </intent-filter>
         </activity>
 

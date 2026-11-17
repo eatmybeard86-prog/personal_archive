@@ -21,6 +21,9 @@ class ArchiveApp : Application() {
     val repo by lazy { VaultRepository(this) { VaultCrypto(this) } }
     val exporter by lazy { Exporter(this, repo) }
     /** Фонове розпізнавання тексту в сканах для пошуку. */
+    val copies by lazy { ua.personal.archive.transfer.SecureCopy(this) { VaultCrypto(this) } }
+    /** Отримана захищена копія (.mydoc), що чекає на імпорт після розблокування. */
+    val pendingCopy = kotlinx.coroutines.flow.MutableStateFlow<android.net.Uri?>(null)
     val ocr by lazy { ua.personal.archive.ocr.OcrIndexer(this, repo) }
 
     /** Файли, отримані з інших додатків; забираються після розблокування. */

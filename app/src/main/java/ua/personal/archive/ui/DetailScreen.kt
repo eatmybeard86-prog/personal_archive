@@ -1,5 +1,6 @@
 package ua.personal.archive.ui
 
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.OutlinedTextField
@@ -82,6 +83,7 @@ fun DetailScreen(docId: String, onBack: () -> Unit, onEdit: () -> Unit, onView: 
     var confirmDelete by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
     var watermarkFor by remember { mutableStateOf<List<Attachment>?>(null) }
+    var secureCopy by remember { mutableStateOf(false) }
 
     if (doc == null) {
         // Документ видалено — повертаємось до списку.
@@ -191,6 +193,9 @@ fun DetailScreen(docId: String, onBack: () -> Unit, onEdit: () -> Unit, onView: 
                 OutlinedButton(onClick = { watermarkFor = doc.attachments }, enabled = busy == null, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.WaterDrop, null); Spacer(Modifier.width(8.dp)); Text("PDF з водяним знаком")
                 }
+                OutlinedButton(onClick = { secureCopy = true }, enabled = busy == null, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Outlined.Timer, null); Spacer(Modifier.width(8.dp)); Text("Копія «N разів / N днів»")
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { shareOriginals(doc.attachments) }, enabled = busy == null, modifier = Modifier.weight(1f)) {
                         Icon(Icons.Outlined.Share, null); Spacer(Modifier.width(4.dp)); Text("Оригінали")
@@ -220,6 +225,7 @@ fun DetailScreen(docId: String, onBack: () -> Unit, onEdit: () -> Unit, onView: 
     }
 
     if (sending) SendDialog(doc) { sending = false }
+    if (secureCopy) SecureCopyDialog(doc) { secureCopy = false }
 
     watermarkFor?.let { list ->
         val today = remember { java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT).format(java.util.Date()) }

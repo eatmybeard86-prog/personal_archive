@@ -56,14 +56,14 @@ object QrTransfer {
     }
 
     @Serializable
-    private class Header(
+    class Header(
         val title: String, val number: String, val note: String, val expiresAt: Long?,
         val tags: List<String>, val section: String, val sectionTitle: String,
         val files: List<FileInfo>,
     )
 
     @Serializable
-    private class FileInfo(val name: String, val mime: String, val size: Long)
+    class FileInfo(val name: String, val mime: String, val size: Long)
 
     /** Адреса телефону в Wi-Fi / точці доступу. */
     fun localAddress(): String? = runCatching {
@@ -102,30 +102,7 @@ object QrTransfer {
                         val got = ByteArray(16)
                         try { input.readFully(got) } catch (e: Exception) { return@use }
                         if (!MessageDigest.isEqual(got, sender.offer.token)) return@use
-                        val out = EncryptingOutput(s.getOutputStream(), sender.offer.key)
-                        val header = Header(
-                            doc.title, doc.number, doc.note, doc.expiresAt, doc.tags, doc.sectionId, sectionTitle,
-                            doc.attachments.map { FileInfo(it.name, it.mime, it.size) },
-                        )
-                        val hb = json.encodeToString(Header.serializer(), header).encodeToByteArray()
-                        val d = DataOutputStream(out)
-                        d.writeInt(hb.size); d.write(hb)
-                        val total = doc.attachments.sumOf { it.size }.coerceAtLeast(1)
-                        var sent = 0L
-                        val buf = ByteArray(CHUNK)
-                        for (a in doc.attachments) {
-                            var left = a.size
-                            repo.openAttachment(a).use { src ->
-                                while (left > 0) {
-                                    val n = src.read(buf, 0, minOf(buf.size.toLong(), left).toInt())
-                                    if (n < 0) throw EOFException("Файл ${a.name} пошкоджено")
-                                    d.write(buf, 0, n); left -= n; sent += n
-                                    onProgress(sent.toFloat() / total)
-                                }
-                            }
-                        }
-                        d.flush()
-                        out.finish()
+                        writeDoc(s.getOutputStream(), sender.offer.key, repo, doc, sectionTitle, onProgress)
                         // Чекаємо підтвердження, що отримувач усе зберіг.
                         runCatching { input.readByte() }
                         return@withContext
@@ -133,6 +110,61 @@ object QrTransfer {
                 }
             }
         }
+
+    /** Пише документ (заголовок + усі файли) у зашифрований потік блоків AES-256-GCM. */
+    fun writeDoc(raw: OutputStream, key: ByteArray, repo: VaultRepository, doc: Document, sectionTitle: String, onProgress: (Float) -> Unit = {}) {
+        val out = EncryptingOutput(raw, key)
+        val header = Header(
+            doc.title, doc.number, doc.note, doc.expiresAt, doc.tags, doc.sectionId, sectionTitle,
+            doc.attachments.map { FileInfo(it.name, it.mime, it.size) },
+        )
+        val hb = json.encodeToString(Header.serializer(), header).encodeToByteArray()
+        val d = DataOutputStream(out)
+        d.writeInt(hb.size); d.write(hb)
+        val total = doc.attachments.sumOf { it.size }.coerceAtLeast(1)
+        var sent = 0L
+        val buf = ByteArray(CHUNK)
+        for (a in doc.attachments) {
+            var left = a.size
+            repo.openAttachment(a).use { src ->
+                while (left > 0) {
+                    val n = src.read(buf, 0, minOf(buf.size.toLong(), left).toInt())
+                    if (n < 0) throw EOFException("Файл ${a.name} пошкоджено")
+                    d.write(buf, 0, n); left -= n; sent += n
+                    onProgress(sent.toFloat() / total)
+                }
+            }
+        }
+        d.flush()
+        out.finish()
+    }
+
+    /** Читає документ із зашифрованого потоку: заголовок, потім кожен файл через [onFile]. */
+    fun readDoc(raw: InputStream, key: ByteArray, onFile: (FileInfo, InputStream) -> Unit): Header {
+        val d = DataInputStream(DecryptingInput(raw, key))
+        val len = d.readInt()
+        require(len in 1..1_000_000) { "Неправильні дані" }
+        val hb = ByteArray(len).also { d.readFully(it) }
+        val header = json.decodeFromString(Header.serializer(), hb.decodeToString())
+        for (f in header.files) {
+            val limited = object : InputStream() {
+                var left = f.size
+                override fun read(): Int {
+                    if (left <= 0) return -1
+                    val b = d.read(); if (b < 0) throw EOFException(); left--; return b
+                }
+                override fun read(b: ByteArray, off: Int, l: Int): Int {
+                    if (left <= 0) return -1
+                    val n = d.read(b, off, minOf(l.toLong(), left).toInt())
+                    if (n < 0) throw EOFException("Дані обірвалися")
+                    left -= n; return n
+                }
+            }
+            onFile(f, limited)
+            while (limited.read() >= 0) { /* дочитуємо залишок */ }
+        }
+        return header
+    }
 
     /** Отримує документ і зберігає його у сховище. Повертає id нового документа. */
     suspend fun receive(offer: Offer, repo: VaultRepository, onProgress: (Float) -> Unit): String = withContext(Dispatchers.IO) {
@@ -198,7 +230,7 @@ object QrTransfer {
     private fun nonce(counter: Long) = ByteArray(12).also { n -> for (i in 0 until 8) n[4 + i] = (counter ushr (8 * (7 - i))).toByte() }
     private fun aad(counter: Long, last: Boolean) = "mydocs-$counter-${if (last) 1 else 0}".encodeToByteArray()
 
-    private class EncryptingOutput(private val raw: OutputStream, key: ByteArray) : OutputStream() {
+    internal class EncryptingOutput(private val raw: OutputStream, key: ByteArray) : OutputStream() {
         private val k = SecretKeySpec(key, "AES")
         private val out = DataOutputStream(raw.buffered(CHUNK + 64))
         private val buf = ByteArray(CHUNK)
@@ -228,7 +260,7 @@ object QrTransfer {
         override fun flush() {}
     }
 
-    private class DecryptingInput(raw: InputStream, key: ByteArray) : InputStream() {
+    internal class DecryptingInput(raw: InputStream, key: ByteArray) : InputStream() {
         private val k = SecretKeySpec(key, "AES")
         private val inp = DataInputStream(raw.buffered(CHUNK + 64))
         private var buf = ByteArray(0)
