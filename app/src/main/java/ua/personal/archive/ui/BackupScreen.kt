@@ -46,7 +46,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import ua.personal.archive.data.BackupManager
-import ua.personal.archive.data.Category
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -58,7 +57,8 @@ fun BackupScreen(onBack: () -> Unit) {
 
     // ── створення ──
     var allSections by remember { mutableStateOf(true) }
-    var selected by remember { mutableStateOf(setOf<Category>()) }
+    val sections = rememberSections()
+    var selected by remember { mutableStateOf(setOf<String>()) }
     var p1 by remember { mutableStateOf("") }
     var p2 by remember { mutableStateOf("") }
     var progress by remember { mutableFloatStateOf(-1f) }
@@ -69,10 +69,10 @@ fun BackupScreen(onBack: () -> Unit) {
     var restoreUri by remember { mutableStateOf<Uri?>(null) }
     var restorePassword by remember { mutableStateOf("") }
     var manifest by remember { mutableStateOf<BackupManager.Manifest?>(null) }
-    var restoreSelected by remember { mutableStateOf(setOf<Category>()) }
+    var restoreSelected by remember { mutableStateOf(setOf<String>()) }
 
-    val chosen: Set<Category>? = if (allSections) null else selected
-    val count = docs.count { chosen == null || it.category in chosen }
+    val chosen: Set<String>? = if (allSections) null else selected
+    val count = docs.count { chosen == null || it.sectionId in chosen }
 
     val createFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -136,13 +136,13 @@ fun BackupScreen(onBack: () -> Unit) {
                 }
                 if (!allSections) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Category.entries.forEach { c ->
-                            val n = docs.count { it.category == c }
+                        sections.forEach { c ->
+                            val n = docs.count { it.sectionId == c.id }
                             FilterChip(
-                                selected = c in selected,
-                                onClick = { selected = if (c in selected) selected - c else selected + c },
+                                selected = c.id in selected,
+                                onClick = { selected = if (c.id in selected) selected - c.id else selected + c.id },
                                 label = { Text("${c.title} ($n)") },
-                                leadingIcon = { Icon(c.icon, null, Modifier.size(18.dp)) },
+                                leadingIcon = { Icon(c.iconVector, null, Modifier.size(18.dp), tint = c.tint) },
                             )
                         }
                     }
@@ -186,7 +186,7 @@ fun BackupScreen(onBack: () -> Unit) {
                 try {
                     val m = backup.inspect(uri, restorePassword.toCharArray())
                     manifest = m
-                    restoreSelected = m.documents.map { it.category }.toSet()
+                    restoreSelected = m.documents.map { it.sectionId }.toSet()
                 } catch (e: BackupManager.WrongPasswordException) {
                     err = "Неправильний пароль"
                 } catch (e: Exception) {
@@ -213,7 +213,8 @@ fun BackupScreen(onBack: () -> Unit) {
 
     // Крок 2: що імпортувати
     manifest?.let { m ->
-        val byCat = m.documents.groupBy { it.category }
+        val byCat = m.documents.groupBy { it.sectionId }
+        fun titleOf(id: String) = m.sections.firstOrNull { it.id == id }?.title ?: app.repo.section(id).title
         AlertDialog(
             onDismissRequest = { manifest = null; restoreUri = null; restorePassword = "" },
             title = { Text("Відновити документи") },
@@ -221,11 +222,11 @@ fun BackupScreen(onBack: () -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Створено ${formatDate(m.createdAt)}. Документів у копії: ${m.documents.size}.")
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        byCat.keys.sortedBy { it.ordinal }.forEach { c ->
+                        byCat.keys.forEach { c ->
                             FilterChip(
                                 selected = c in restoreSelected,
                                 onClick = { restoreSelected = if (c in restoreSelected) restoreSelected - c else restoreSelected + c },
-                                label = { Text("${c.title} (${byCat.getValue(c).size})") },
+                                label = { Text("${titleOf(c)} (${byCat.getValue(c).size})") },
                             )
                         }
                     }

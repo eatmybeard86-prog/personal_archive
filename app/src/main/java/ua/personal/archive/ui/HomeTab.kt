@@ -1,6 +1,11 @@
 package ua.personal.archive.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,6 +29,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
@@ -45,13 +51,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import ua.personal.archive.data.Category
+import ua.personal.archive.data.Section
 
 /** Головна: шапка з гербом-щитом, статус захисту, плитки розділів, останні документи. */
 @Composable
 fun HomeTab(
     onOpen: (String) -> Unit,
-    onCategory: (Category) -> Unit,
+    onCategory: (Section) -> Unit,
+    onManageSections: () -> Unit,
     onAll: () -> Unit,
     onSecurity: () -> Unit,
     onSettings: () -> Unit,
@@ -67,22 +74,28 @@ fun HomeTab(
         Modifier.fillMaxSize().background(cs.background).verticalScroll(rememberScrollState()).padding(bottom = 96.dp),
     ) {
         // ── Шапка ─────────────────────────────────────────────
+        // Висота шапки визначається її вмістом, тож великий шрифт у системі нічого не ламає.
         Box(
-            Modifier.fillMaxWidth().height(230.dp)
+            Modifier.fillMaxWidth()
                 .background(Brush.verticalGradient(listOf(Color(0xFF0E2350), cs.background))),
         ) {
-            GhostShield(Modifier.align(Alignment.TopEnd).padding(top = 40.dp, end = 40.dp).size(150.dp, 175.dp))
-            FlagWave(Modifier.align(Alignment.BottomEnd).fillMaxWidth(0.7f).height(130.dp))
+            GhostShield(Modifier.align(Alignment.TopEnd).padding(top = 36.dp, end = 36.dp).size(110.dp, 128.dp).alpha(0.7f))
+            FlagWave(Modifier.align(Alignment.BottomEnd).fillMaxWidth(0.6f).height(70.dp).alpha(0.75f))
             Row(
-                Modifier.statusBarsPadding().padding(start = 20.dp, end = 8.dp, top = 24.dp).fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
+                Modifier.statusBarsPadding().padding(start = 20.dp, end = 8.dp, top = 16.dp, bottom = 28.dp).fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                ShieldLogo(72.dp)
-                Spacer(Modifier.width(16.dp))
-                Column(Modifier.weight(1f).padding(top = 4.dp)) {
-                    Text("Мої документи", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color.White)
-                    Spacer(Modifier.height(6.dp))
-                    Text("Надійне зберігання\nважливих файлів", style = MaterialTheme.typography.bodyLarge, color = Color(0xFFB4C3DE))
+                ShieldLogo(56.dp)
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Мої документи", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold,
+                        color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        "Надійне зберігання важливих файлів", style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFB4C3DE), maxLines = 2,
+                    )
                 }
                 IconButton(
                     onClick = onSettings,
@@ -96,16 +109,25 @@ fun HomeTab(
             StatusCard(
                 ok = loadError == null,
                 title = if (loadError == null) "Ваші документи захищено" else "Сховище недоступне",
-                subtitle = loadError ?: if (expiring > 0) "Шифрування увімкнено · спливає строк: $expiring" else "Шифрування AES-256 увімкнено",
+                subtitle = loadError ?: if (expiring > 0) "Спливає строк: $expiring" else "Шифрування увімкнено",
                 onClick = onSecurity,
             )
 
             // ── Розділи ──────────────────────────────────────
-            Category.entries.chunked(3).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            val sections = rememberSections()
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Розділи", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                TextButton(onClick = onManageSections) { Text("Змінити") }
+            }
+            // При великому системному шрифті — дві плитки в ряд, щоб назви вміщались.
+            val columns = if (LocalDensity.current.fontScale > 1.15f) 2 else 3
+            (sections.map<Section, Section?> { it } + null).chunked(columns).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.height(IntrinsicSize.Min)) {
                     row.forEach { c ->
-                        CategoryTile(c, docs.count { it.category == c }, Modifier.weight(1f)) { onCategory(c) }
+                        if (c != null) CategoryTile(c, docs.count { it.sectionId == c.id }, Modifier.weight(1f)) { onCategory(c) }
+                        else AddSectionTile(Modifier.weight(1f), onManageSections)
                     }
+                    repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
 
@@ -139,40 +161,60 @@ private fun StatusCard(ok: Boolean, title: String, subtitle: String, onClick: ()
             .background(Brush.horizontalGradient(listOf(color.copy(alpha = 0.32f), color.copy(alpha = 0.10f))))
             .border(BorderStroke(1.dp, color.copy(alpha = 0.45f)), shape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 14.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ShieldBadge(40.dp, color) {
-            Icon(if (ok) Icons.Filled.Check else Icons.Filled.Warning, null, tint = Color.White, modifier = Modifier.size(22.dp))
+        ShieldBadge(32.dp, color) {
+            Icon(if (ok) Icons.Filled.Check else Icons.Filled.Warning, null, tint = Color.White, modifier = Modifier.size(18.dp))
         }
-        Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
-private fun CategoryTile(c: Category, count: Int, modifier: Modifier, onClick: () -> Unit) {
+private fun CategoryTile(c: Section, count: Int, modifier: Modifier, onClick: () -> Unit) {
     val shape = RoundedCornerShape(18.dp)
-    val tint = Color(c.color)
+    val tint = c.tint
     Column(
-        modifier.aspectRatio(1.15f).clip(shape)
-            .background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.colorScheme.surfaceContainer)))
+        modifier.fillMaxHeight().heightIn(min = 92.dp).clip(shape)
+            .background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.surfaceContainer)))
             .border(1.dp, cardBorder(), shape)
             .clickable(onClick = onClick)
-            .padding(8.dp),
+            .padding(horizontal = 6.dp, vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Box(
             Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(tint.copy(alpha = 0.16f)),
             contentAlignment = Alignment.Center,
-        ) { Icon(c.icon, null, tint = tint, modifier = Modifier.size(28.dp)) }
+        ) { Icon(c.iconVector, null, tint = tint, modifier = Modifier.size(28.dp)) }
         Spacer(Modifier.height(8.dp))
-        Text(c.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(
+            c.title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+        )
         Text("($count)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun AddSectionTile(modifier: Modifier, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(18.dp)
+    Column(
+        modifier.fillMaxHeight().heightIn(min = 92.dp).clip(shape)
+            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), shape)
+            .clickable(onClick = onClick)
+            .padding(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(Icons.Filled.Add, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
+        Spacer(Modifier.height(6.dp))
+        Text("Новий розділ", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, maxLines = 2, textAlign = TextAlign.Center)
     }
 }

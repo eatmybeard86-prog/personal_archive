@@ -38,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -51,13 +52,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import ua.personal.archive.data.Category
 import ua.personal.archive.data.Document
 
 /** Вкладка «Папки»: усі документи з пошуком і фільтром за розділом. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FoldersTab(category: Category?, onCategory: (Category?) -> Unit, onOpen: (String) -> Unit) {
+fun FoldersTab(category: String?, onCategory: (String?) -> Unit, onOpen: (String) -> Unit, onSections: () -> Unit) {
+    val sections = rememberSections()
     val app = LocalApp.current
     val docs by app.repo.documents.collectAsStateWithLifecycle()
     val loaded by app.repo.loaded.collectAsStateWithLifecycle()
@@ -67,7 +68,7 @@ fun FoldersTab(category: Category?, onCategory: (Category?) -> Unit, onOpen: (St
     val filtered = remember(docs, query, category) {
         val q = query.trim().lowercase()
         docs.filter { d ->
-            (category == null || d.category == category) &&
+            (category == null || d.sectionId == category) &&
                 (q.isEmpty() || d.title.lowercase().contains(q) || d.number.lowercase().contains(q) ||
                     d.note.lowercase().contains(q) || d.attachments.any { it.name.lowercase().contains(q) })
         }.sortedByDescending { it.updatedAt }
@@ -75,7 +76,12 @@ fun FoldersTab(category: Category?, onCategory: (Category?) -> Unit, onOpen: (St
     val expiring = remember(docs) { docs.count { it.expiresAt != null && daysLeft(it.expiresAt) <= 60 } }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Папки") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Папки") },
+                actions = { TextButton(onClick = onSections) { Text("Розділи") } },
+            )
+        },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
@@ -92,13 +98,13 @@ fun FoldersTab(category: Category?, onCategory: (Category?) -> Unit, onOpen: (St
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 FilterChip(selected = category == null, onClick = { onCategory(null) }, label = { Text("Усі (${docs.size})") })
-                Category.entries.forEach { c ->
-                    val n = docs.count { it.category == c }
+                sections.forEach { c ->
+                    val n = docs.count { it.sectionId == c.id }
                     FilterChip(
-                        selected = category == c,
-                        onClick = { onCategory(if (category == c) null else c) },
+                        selected = category == c.id,
+                        onClick = { onCategory(if (category == c.id) null else c.id) },
                         label = { Text(if (n > 0) "${c.title} ($n)" else c.title) },
-                        leadingIcon = { Icon(c.icon, null, Modifier.size(18.dp)) },
+                        leadingIcon = { Icon(c.iconVector, null, Modifier.size(18.dp), tint = c.tint) },
                     )
                 }
             }
@@ -154,7 +160,7 @@ fun DocumentCard(doc: Document, onClick: () -> Unit) {
                 Text(doc.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val size = doc.attachments.sumOf { it.size }
                 val sub = listOfNotNull(
-                    doc.category.title,
+                    LocalApp.current.repo.section(doc.sectionId).title,
                     if (size > 0) ua.personal.archive.util.PdfConverter.formatSize(size) else null,
                     relativeDate(doc.updatedAt),
                 ).joinToString("  •  ")

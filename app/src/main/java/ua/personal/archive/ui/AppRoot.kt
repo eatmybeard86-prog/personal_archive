@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.fragment.app.FragmentActivity
@@ -14,7 +15,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import ua.personal.archive.ArchiveApp
-import ua.personal.archive.data.Category
 
 val LocalApp = staticCompositionLocalOf<ArchiveApp> { error("no app") }
 
@@ -36,24 +36,34 @@ private fun Unlocked(app: ArchiveApp) {
             app.repo.load()
         }
         val nav = rememberNavController()
+        val incoming by app.incoming.collectAsStateWithLifecycle()
+        LaunchedEffect(incoming) {
+            if (incoming.isNotEmpty()) nav.navigate("edit?id=&cat=&shared=1")
+        }
         NavHost(nav, startDestination = "home") {
             composable("home") {
                 MainScreen(
                     onOpen = { nav.navigate("doc/$it") },
-                    onAdd = { c -> nav.navigate("edit?id=&cat=${c?.name.orEmpty()}") },
+                    onAdd = { c -> nav.navigate("edit?id=&cat=${c.orEmpty()}") },
                     onBackup = { nav.navigate("backup") },
+                    onSections = { nav.navigate("sections") },
                 )
             }
             composable(
-                "edit?id={id}&cat={cat}",
+                "edit?id={id}&cat={cat}&shared={shared}",
                 arguments = listOf(
                     navArgument("id") { type = NavType.StringType; defaultValue = "" },
                     navArgument("cat") { type = NavType.StringType; defaultValue = "" },
+                    navArgument("shared") { type = NavType.StringType; defaultValue = "" },
                 ),
             ) {
+                val shared = remember {
+                    if (it.arguments?.getString("shared") == "1") app.incoming.value.also { app.incoming.value = emptyList() } else emptyList()
+                }
                 EditScreen(
+                    sharedUris = shared,
                     docId = it.arguments?.getString("id").orEmpty().ifBlank { null },
-                    initialCategory = it.arguments?.getString("cat")?.let { c -> Category.entries.firstOrNull { e -> e.name == c } },
+                    initialCategory = it.arguments?.getString("cat")?.ifBlank { null },
                     onDone = { id ->
                         nav.popBackStack()
                         if (id != null && nav.currentDestination?.route == "home") nav.navigate("doc/$id")
@@ -78,6 +88,7 @@ private fun Unlocked(app: ArchiveApp) {
                 )
             }
             composable("backup") { BackupScreen(onBack = { nav.popBackStack() }) }
+            composable("sections") { SectionsScreen(onBack = { nav.popBackStack() }) }
         }
     }
 }

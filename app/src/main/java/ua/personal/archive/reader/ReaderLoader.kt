@@ -25,7 +25,7 @@ object ReaderLoader {
                 Kind.PDF -> PdfDoc(name, file, dir)
                 Kind.IMAGE -> ImageDoc(name, listOf(file), dir)
                 Kind.DOCX -> when (val k = PdfConverter.kindOf(name, mime)) {
-                    PdfConverter.Kind.XLSX, PdfConverter.Kind.ODT -> textDoc(name, PdfConverter.extractText(k, file.readBytes()), dir, table = k == PdfConverter.Kind.XLSX)
+                    PdfConverter.Kind.XLSX, PdfConverter.Kind.ODT, PdfConverter.Kind.PPTX -> textDoc(name, PdfConverter.extractText(k, file.readBytes()), dir, table = k == PdfConverter.Kind.XLSX)
                     else -> {
                         val zip = ZipFile(file)
                         try { TextDoc(name, DocxParser.parse(zip), zip, dir) } catch (e: Throwable) { zip.close(); throw e }

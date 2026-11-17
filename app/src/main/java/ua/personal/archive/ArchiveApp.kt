@@ -15,6 +15,9 @@ class ArchiveApp : Application() {
     val repo by lazy { VaultRepository(this) { VaultCrypto(this) } }
     val exporter by lazy { Exporter(this, repo) }
 
+    /** Файли, отримані з інших додатків; забираються після розблокування. */
+    val incoming = kotlinx.coroutines.flow.MutableStateFlow<List<android.net.Uri>>(emptyList())
+
     override fun onCreate() {
         super.onCreate()
         settings = SettingsStore(this)

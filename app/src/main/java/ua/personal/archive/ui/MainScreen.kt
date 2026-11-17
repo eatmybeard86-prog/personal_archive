@@ -28,7 +28,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import ua.personal.archive.data.Category
 
 enum class Tab(val title: String, val icon: ImageVector) {
     HOME("Головна", Icons.Filled.Home),
@@ -41,11 +40,12 @@ enum class Tab(val title: String, val icon: ImageVector) {
 @Composable
 fun MainScreen(
     onOpen: (String) -> Unit,
-    onAdd: (Category?) -> Unit,
+    onAdd: (String?) -> Unit,
     onBackup: () -> Unit,
+    onSections: () -> Unit,
 ) {
     var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
-    var folderCategory by rememberSaveable { mutableStateOf<Category?>(null) }
+    var folderCategory by rememberSaveable { mutableStateOf<String?>(null) }
     val cs = MaterialTheme.colorScheme
 
     Scaffold(
@@ -83,12 +83,13 @@ fun MainScreen(
             when (tab) {
                 Tab.HOME -> HomeTab(
                     onOpen = onOpen,
-                    onCategory = { folderCategory = it; tab = Tab.FOLDERS },
+                    onCategory = { folderCategory = it.id; tab = Tab.FOLDERS },
+                    onManageSections = onSections,
                     onAll = { folderCategory = null; tab = Tab.FOLDERS },
                     onSecurity = { tab = Tab.SECURITY },
                     onSettings = { tab = Tab.MORE },
                 )
-                Tab.FOLDERS -> FoldersTab(folderCategory, { folderCategory = it }, onOpen)
+                Tab.FOLDERS -> FoldersTab(folderCategory, { folderCategory = it }, onOpen, onSections)
                 Tab.SECURITY -> SecurityTab(onBackup)
                 Tab.MORE -> MoreTab(onBackup)
             }

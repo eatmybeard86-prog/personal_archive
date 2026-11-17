@@ -128,9 +128,10 @@ fun DetailScreen(docId: String, onBack: () -> Unit, onEdit: () -> Unit, onView: 
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(doc.category.icon, null, tint = MaterialTheme.colorScheme.primary)
+                        val section = app.repo.section(doc.sectionId)
+                        Icon(section.iconVector, null, tint = section.tint)
                         Spacer(Modifier.width(8.dp))
-                        Text(doc.category.title, style = MaterialTheme.typography.titleSmall)
+                        Text(section.title, style = MaterialTheme.typography.titleSmall)
                     }
                     if (doc.number.isNotBlank()) Field("Номер / серія", doc.number)
                     doc.expiresAt?.let {

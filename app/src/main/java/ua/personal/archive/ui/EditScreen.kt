@@ -47,6 +47,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -67,14 +68,16 @@ import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun EditScreen(docId: String?, initialCategory: Category? = null, onDone: (String?) -> Unit, onBack: () -> Unit) {
+fun EditScreen(docId: String?, initialCategory: String? = null, sharedUris: List<Uri> = emptyList(), onDone: (String?) -> Unit, onBack: () -> Unit) {
     val app = LocalApp.current
     val repo = app.repo
     val scope = rememberCoroutineScope()
     val original = remember(docId) { docId?.let { repo.find(it) } }
 
     var title by remember { mutableStateOf(original?.title.orEmpty()) }
-    var category by remember { mutableStateOf(original?.category ?: initialCategory ?: Category.PERSONAL) }
+    val sections = rememberSections()
+    val defaultSection = original?.sectionId ?: initialCategory ?: sections.firstOrNull()?.id ?: Category.OTHER.name
+    var category by remember { mutableStateOf(defaultSection) }
     var number by remember { mutableStateOf(original?.number.orEmpty()) }
     var note by remember { mutableStateOf(original?.note.orEmpty()) }
     var expiresAt by remember { mutableStateOf(original?.expiresAt) }
@@ -106,6 +109,9 @@ fun EditScreen(docId: String?, initialCategory: Category? = null, onDone: (Strin
         }
     }
 
+    // Файли, надіслані з іншого додатку («Поділитися» / «Відкрити за допомогою»).
+    LaunchedEffect(sharedUris) { if (sharedUris.isNotEmpty()) importUris(sharedUris) }
+
     val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { importUris(it) }
     val pickImages = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { importUris(it) }
     val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
@@ -116,7 +122,7 @@ fun EditScreen(docId: String?, initialCategory: Category? = null, onDone: (Strin
         } else f?.delete()
     }
 
-    val dirty = title != original?.title.orEmpty() || added.isNotEmpty() || category != (original?.category ?: initialCategory ?: Category.PERSONAL) ||
+    val dirty = title != original?.title.orEmpty() || added.isNotEmpty() || category != defaultSection ||
         number != original?.number.orEmpty() || note != original?.note.orEmpty() || expiresAt != original?.expiresAt ||
         attachments.size != (original?.attachments?.size ?: 0)
 
@@ -131,8 +137,8 @@ fun EditScreen(docId: String?, initialCategory: Category? = null, onDone: (Strin
         busy = true
         scope.launch {
             val now = System.currentTimeMillis()
-            val doc = (original ?: Document(id = UUID.randomUUID().toString(), title = "", category = category, createdAt = now, updatedAt = now))
-                .copy(title = title.trim(), category = category, number = number.trim(), note = note.trim(), expiresAt = expiresAt, attachments = attachments.toList())
+            val doc = (original ?: Document(id = UUID.randomUUID().toString(), title = "", section = category, createdAt = now, updatedAt = now))
+                .copy(title = title.trim(), section = category, number = number.trim(), note = note.trim(), expiresAt = expiresAt, attachments = attachments.toList())
             try {
                 repo.save(doc)
                 // Файли, які прибрали з документа, видаляються зі сховища.
@@ -168,14 +174,14 @@ fun EditScreen(docId: String?, initialCategory: Category? = null, onDone: (Strin
 
             Text("Розділ", style = MaterialTheme.typography.titleSmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Category.entries.forEach { c ->
+                sections.forEach { c ->
                     FilterChip(
-                        selected = category == c, onClick = { category = c },
-                        label = { Text(c.title) }, leadingIcon = { Icon(c.icon, null, Modifier.size(18.dp)) },
+                        selected = category == c.id, onClick = { category = c.id },
+                        label = { Text(c.title) }, leadingIcon = { Icon(c.iconVector, null, Modifier.size(18.dp), tint = c.tint) },
                     )
                 }
             }
-            Text(category.hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (app.repo.section(category).hint.isNotBlank()) Text(app.repo.section(category).hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
             OutlinedTextField(number, { number = it }, label = { Text("Номер / серія") }, singleLine = true, modifier = Modifier.fillMaxWidth())
 
@@ -192,22 +198,33 @@ fun EditScreen(docId: String?, initialCategory: Category? = null, onDone: (Strin
 
             HorizontalDivider()
             Text("Файли (${attachments.size})", style = MaterialTheme.typography.titleSmall)
+            // Головна кнопка — будь-які файли: PDF, Word, Excel, PowerPoint, фото, текст тощо.
+            Button(
+                onClick = {
+                    app.lock.expectingExternalActivity = true
+                    pickFiles.launch(arrayOf("*/*"))
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Outlined.UploadFile, null); Spacer(Modifier.width(8.dp))
+                Text("Додати файли (PDF, Word, Excel…)")
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
                     val (file, uri) = app.exporter.cameraUri()
                     cameraFile = file
                     app.lock.expectingExternalActivity = true
                     takePhoto.launch(uri)
-                }) { Icon(Icons.Outlined.PhotoCamera, null); Spacer(Modifier.width(4.dp)); Text("Камера") }
+                }, modifier = Modifier.weight(1f)) { Icon(Icons.Outlined.PhotoCamera, null); Spacer(Modifier.width(4.dp)); Text("Камера") }
                 OutlinedButton(onClick = {
                     app.lock.expectingExternalActivity = true
                     pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                }) { Icon(Icons.Outlined.Image, null); Spacer(Modifier.width(4.dp)); Text("Галерея") }
-                OutlinedButton(onClick = {
-                    app.lock.expectingExternalActivity = true
-                    pickFiles.launch(arrayOf("*/*"))
-                }) { Icon(Icons.Outlined.UploadFile, null); Spacer(Modifier.width(4.dp)); Text("Файл") }
+                }, modifier = Modifier.weight(1f)) { Icon(Icons.Outlined.Image, null); Spacer(Modifier.width(4.dp)); Text("Галерея") }
             }
+            Text(
+                "Можна вибрати кілька файлів одразу. Також файл можна надіслати сюди з будь-якого додатку через «Поділитися» → «Мої документи».",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             attachments.forEach { a ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(

@@ -148,7 +148,8 @@ fun fileStyle(a: Attachment?): FileStyle {
     return when (PdfConverter.kindOf(a)) {
         PdfConverter.Kind.PDF -> FileStyle("PDF", Color(0xFFE5322D))
         PdfConverter.Kind.DOCX, PdfConverter.Kind.DOC, PdfConverter.Kind.RTF, PdfConverter.Kind.ODT -> FileStyle(ext.ifBlank { "DOC" }, Color(0xFF2B6FF3))
-        PdfConverter.Kind.XLSX -> FileStyle("XLSX", Color(0xFF1FA35B))
+        PdfConverter.Kind.XLSX -> FileStyle(ext.ifBlank { "XLSX" }, Color(0xFF1FA35B))
+        PdfConverter.Kind.PPTX -> FileStyle("PPTX", Color(0xFFE8710A))
         PdfConverter.Kind.IMAGE -> FileStyle(ext.ifBlank { "IMG" }, Color(0xFF8B5CF6))
         PdfConverter.Kind.TEXT, PdfConverter.Kind.HTML -> FileStyle(ext.ifBlank { "TXT" }, Color(0xFF64748B))
         PdfConverter.Kind.OTHER -> FileStyle(ext.ifBlank { "FILE" }, Color(0xFF64748B))

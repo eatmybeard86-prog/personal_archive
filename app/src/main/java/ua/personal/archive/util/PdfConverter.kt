@@ -101,7 +101,7 @@ class PdfConverter(private val workDir: File) {
         }
     }
 
-    enum class Kind { PDF, IMAGE, TEXT, HTML, DOCX, DOC, ODT, XLSX, RTF, OTHER }
+    enum class Kind { PDF, IMAGE, TEXT, HTML, DOCX, DOC, ODT, XLSX, PPTX, RTF, OTHER }
 
     private inner class PageWriter(private val pdf: PdfDocument) {
         private var pageNo = 0
@@ -253,7 +253,8 @@ class PdfConverter(private val workDir: File) {
                 mime == "text/html" || ext in setOf("html", "htm") -> Kind.HTML
                 ext == "docx" || mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> Kind.DOCX
                 ext == "doc" || mime == "application/msword" -> Kind.DOC
-                ext == "odt" || mime == "application/vnd.oasis.opendocument.text" -> Kind.ODT
+                ext in setOf("odt", "ods", "odp") || mime.startsWith("application/vnd.oasis.opendocument.") -> Kind.ODT
+                ext == "pptx" || mime == "application/vnd.openxmlformats-officedocument.presentationml.presentation" -> Kind.PPTX
                 ext == "xlsx" || mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" -> Kind.XLSX
                 ext == "rtf" || mime == "application/rtf" || mime == "text/rtf" -> Kind.RTF
                 mime.startsWith("text/") || mime == "application/json" || mime == "application/xml" ||
@@ -267,6 +268,7 @@ class PdfConverter(private val workDir: File) {
             Kind.HTML -> htmlToText(bytes.decodeToString())
             Kind.ODT -> odtText(bytes)
             Kind.XLSX -> xlsxText(bytes)
+            Kind.PPTX -> pptxText(bytes)
             Kind.RTF -> rtfText(bytes.decodeToString())
             else -> decodeText(bytes)
         }
@@ -402,6 +404,27 @@ class PdfConverter(private val workDir: File) {
                     }
                 }
             return sb.toString()
+        }
+
+        /** Текст слайдів PowerPoint: кожен слайд — заголовок «Слайд N» і його абзаци. */
+        fun pptxText(bytes: ByteArray): String {
+            val slides = zipEntries(bytes) { it.matches(Regex("ppt/slides/slide\\d+\\.xml")) }
+            val sb = StringBuilder()
+            slides.keys.sortedBy { it.filter(Char::isDigit).toIntOrNull() ?: 0 }.forEachIndexed { i, key ->
+                if (i > 0) sb.append("\n")
+                sb.append("— Слайд ${i + 1} —\n")
+                val p = parser(slides.getValue(key))
+                var inText = false
+                while (true) {
+                    when (p.next()) {
+                        XmlPullParser.END_DOCUMENT -> break
+                        XmlPullParser.START_TAG -> when (p.name) { "a:t" -> inText = true; "a:br" -> sb.append('\n') }
+                        XmlPullParser.END_TAG -> when (p.name) { "a:t" -> inText = false; "a:p" -> sb.append('\n') }
+                        XmlPullParser.TEXT -> if (inText) sb.append(p.text)
+                    }
+                }
+            }
+            return sb.toString().ifBlank { "(у презентації немає тексту)" }
         }
 
         /** Спрощене видалення керуючих слів RTF (кирилиця у форматі \'xx за cp1251). */

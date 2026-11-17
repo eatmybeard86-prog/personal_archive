@@ -52,6 +52,8 @@ class BackupManager(private val context: Context, private val repo: VaultReposit
         val version: Int = 1,
         val createdAt: Long,
         val documents: List<Document>,
+        /** Розділи, до яких належать документи копії (щоб відновити й власні розділи). */
+        val sections: List<Section> = emptyList(),
         /** id вкладення -> шлях у «Архів.zip» */
         val paths: Map<String, String>,
     )
@@ -63,11 +65,11 @@ class BackupManager(private val context: Context, private val repo: VaultReposit
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; prettyPrint = true }
 
-    fun suggestedName(categories: Set<Category>?): String {
+    fun suggestedName(categories: Set<String>?): String {
         val date = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date())
         val part = when {
-            categories == null || categories.size == Category.entries.size -> "усі документи"
-            categories.size <= 2 -> categories.joinToString(", ") { it.title }
+            categories == null -> "усі документи"
+            categories.size <= 2 -> categories.joinToString(", ") { Exporter.safeName(repo.section(it).title) }
             else -> "${categories.size} розділи"
         }
         return "Мої документи - $part - $date.zip"
@@ -77,17 +79,17 @@ class BackupManager(private val context: Context, private val repo: VaultReposit
     suspend fun export(
         target: Uri,
         password: CharArray,
-        categories: Set<Category>?,
+        categories: Set<String>?,
         onProgress: (Float) -> Unit,
     ): Int = withContext(Dispatchers.IO) {
-        val docs = repo.documents.value.filter { categories == null || it.category in categories }
+        val docs = repo.documents.value.filter { categories == null || it.sectionId in categories }
         val total = docs.sumOf { d -> d.attachments.sumOf { it.size } }.coerceAtLeast(1)
         var done = 0L
 
         val paths = LinkedHashMap<String, String>()
         val usedDirs = HashSet<String>()
         docs.forEach { d ->
-            var dir = "${d.category.title}/${Exporter.safeName(d.title)}"
+            var dir = "${Exporter.safeName(repo.section(d.sectionId).title)}/${Exporter.safeName(d.title)}"
             if (!usedDirs.add(dir)) dir = "$dir (${d.id.take(6)})".also { usedDirs.add(it) }
             val usedNames = HashSet<String>()
             d.attachments.forEach { a ->
@@ -96,7 +98,12 @@ class BackupManager(private val context: Context, private val repo: VaultReposit
                 paths[a.id] = "$dir/$name"
             }
         }
-        val manifest = Manifest(createdAt = System.currentTimeMillis(), documents = docs, paths = paths)
+        val manifest = Manifest(
+            createdAt = System.currentTimeMillis(),
+            documents = docs.map { it.copy(section = it.sectionId) },
+            sections = docs.map { it.sectionId }.distinct().map { repo.section(it) },
+            paths = paths,
+        )
 
         val out = context.contentResolver.openOutputStream(target, "w") ?: error("Не вдалося створити файл")
         out.use { raw ->
@@ -160,13 +167,13 @@ class BackupManager(private val context: Context, private val repo: VaultReposit
     suspend fun restore(
         source: Uri,
         password: CharArray,
-        categories: Set<Category>?,
+        categories: Set<String>?,
         onProgress: (Float) -> Unit,
     ): ImportResult = withContext(Dispatchers.IO) {
         val manifest = inspect(source, password.copyOf())
         val existing = repo.documents.value.map { it.id }.toSet()
-        val wanted = manifest.documents.filter { (categories == null || it.category in categories) && it.id !in existing }
-        val skipped = manifest.documents.count { (categories == null || it.category in categories) && it.id in existing }
+        val wanted = manifest.documents.filter { (categories == null || it.sectionId in categories) && it.id !in existing }
+        val skipped = manifest.documents.count { (categories == null || it.sectionId in categories) && it.id in existing }
         val pathToAttachment = HashMap<String, Pair<Document, Attachment>>()
         wanted.forEach { d -> d.attachments.forEach { a -> manifest.paths[a.id]?.let { pathToAttachment[it] = d to a } } }
         val total = pathToAttachment.values.sumOf { it.second.size }.coerceAtLeast(1)
@@ -184,6 +191,11 @@ class BackupManager(private val context: Context, private val repo: VaultReposit
                 val imported = repo.importStream(counting, a.name, a.mime)
                 newAttachments[a.id] = imported.copy(addedAt = a.addedAt)
                 true
+            }
+            // Розділи, яких ще немає на цьому телефоні, додаються з копії.
+            val known = repo.sections.value.map { it.id }.toSet()
+            wanted.map { it.sectionId }.distinct().filter { it !in known }.forEach { id ->
+                repo.saveSection(manifest.sections.firstOrNull { it.id == id } ?: repo.section(id))
             }
             var files = 0
             wanted.forEach { d ->
@@ -236,8 +248,8 @@ class BackupManager(private val context: Context, private val repo: VaultReposit
         appendLine("Щоб повернути копію в додаток, відкрийте «Налаштування → Резервні копії → Відновити»")
         appendLine("і виберіть зовнішній зашифрований файл (не цей Архів.zip).")
         appendLine()
-        m.documents.groupBy { it.category }.forEach { (c, list) ->
-            appendLine("== ${c.title} ==")
+        m.documents.groupBy { it.sectionId }.forEach { (c, list) ->
+            appendLine("== ${m.sections.firstOrNull { it.id == c }?.title ?: repo.section(c).title} ==")
             list.forEach { d ->
                 append("• ${d.title}")
                 if (d.number.isNotBlank()) append(" — № ${d.number}")
