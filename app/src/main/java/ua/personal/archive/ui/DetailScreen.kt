@@ -1,5 +1,9 @@
 package ua.personal.archive.ui
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.AssistChip
+import androidx.compose.material.icons.outlined.WaterDrop
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -76,6 +80,7 @@ fun DetailScreen(docId: String, onBack: () -> Unit, onEdit: () -> Unit, onView: 
     var error by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
+    var watermarkFor by remember { mutableStateOf<List<Attachment>?>(null) }
 
     if (doc == null) {
         // Документ видалено — повертаємось до списку.
@@ -97,8 +102,8 @@ fun DetailScreen(docId: String, onBack: () -> Unit, onEdit: () -> Unit, onView: 
         app.lock.expectingExternalActivity = true
         ex.shareFiles(files, doc.title)
     }
-    fun sharePdf(list: List<Attachment>) = run("Створення PDF") {
-        val pdf = ex.buildPdf(pdfDoc(doc, list), list)
+    fun sharePdf(list: List<Attachment>, watermark: String? = null) = run("Створення PDF") {
+        val pdf = ex.buildPdf(pdfDoc(doc, list), list, watermark)
         app.lock.expectingExternalActivity = true
         ex.shareFiles(listOf(pdf), doc.title)
     }
@@ -173,6 +178,9 @@ fun DetailScreen(docId: String, onBack: () -> Unit, onEdit: () -> Unit, onView: 
                 Button(onClick = { sharePdf(doc.attachments) }, enabled = busy == null, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.PictureAsPdf, null); Spacer(Modifier.width(8.dp)); Text("Надіслати як один PDF")
                 }
+                OutlinedButton(onClick = { watermarkFor = doc.attachments }, enabled = busy == null, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Outlined.WaterDrop, null); Spacer(Modifier.width(8.dp)); Text("PDF з водяним знаком")
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { shareOriginals(doc.attachments) }, enabled = busy == null, modifier = Modifier.weight(1f)) {
                         Icon(Icons.Outlined.Share, null); Spacer(Modifier.width(4.dp)); Text("Оригінали")
@@ -202,6 +210,30 @@ fun DetailScreen(docId: String, onBack: () -> Unit, onEdit: () -> Unit, onView: 
     }
 
     if (sending) SendDialog(doc) { sending = false }
+
+    watermarkFor?.let { list ->
+        val today = remember { java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT).format(java.util.Date()) }
+        var text by remember { mutableStateOf("Копія для банку, $today") }
+        AlertDialog(
+            onDismissRequest = { watermarkFor = null },
+            title = { Text("Водяний знак") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Напис з'явиться навскіс на кожній сторінці PDF — так копію не використають деінде.", style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(text, { text = it }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("банку", "нотаріуса", "роботодавця", "посольства", "страхової").forEach { who ->
+                            AssistChip(onClick = { text = "Копія для $who, $today" }, label = { Text(who) })
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { watermarkFor = null; sharePdf(list, text) }, enabled = text.isNotBlank()) { Text("Надіслати") }
+            },
+            dismissButton = { TextButton(onClick = { watermarkFor = null }) { Text("Скасувати") } },
+        )
+    }
 
     if (confirmDelete) {
         AlertDialog(

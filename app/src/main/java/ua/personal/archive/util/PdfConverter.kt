@@ -50,9 +50,11 @@ class PdfConverter(private val workDir: File) {
 
     data class Item(val attachment: Attachment, val source: Source)
 
-    fun convert(items: List<Item>, output: File, title: String) {
-        // Один PDF без змін — віддаємо оригінал без втрати якості.
-        if (items.size == 1 && kindOf(items[0].attachment) == Kind.PDF) {
+    /** [watermark] — напис навскіс на кожній сторінці (наприклад, «Копія для банку, 17.11.2026»). */
+    fun convert(items: List<Item>, output: File, title: String, watermark: String? = null) {
+        this.watermark = watermark?.trim()?.ifEmpty { null }
+        // Один PDF без змін (і без водяного знака) — віддаємо оригінал без втрати якості.
+        if (this.watermark == null && items.size == 1 && kindOf(items[0].attachment) == Kind.PDF) {
             output.writeBytes(items[0].source.bytes())
             return
         }
@@ -101,6 +103,36 @@ class PdfConverter(private val workDir: File) {
         }
     }
 
+    private var watermark: String? = null
+
+    /** Водяний знак: напівпрозорий текст по діагоналі, кілька рядків, щоб його не можна було просто обрізати. */
+    private fun stamp(page: PdfDocument.Page) {
+        val text = watermark ?: return
+        val c = page.canvas
+        val w = page.info.pageWidth.toFloat()
+        val h = page.info.pageHeight.toFloat()
+        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(70, 200, 30, 30)
+            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+            textSize = (w / 16f).coerceAtLeast(14f)
+            textAlign = Paint.Align.CENTER
+        }
+        c.save()
+        c.rotate(-35f, w / 2, h / 2)
+        val step = paint.textSize * 5
+        var y = -h * 0.2f
+        while (y < h * 1.2f) {
+            c.drawText(text, w / 2, y, paint)
+            y += step
+        }
+        c.restore()
+        // Дрібний рядок унизу — читається, навіть якщо діагональні написи світлі.
+        val small = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(160, 160, 20, 20); textSize = (w / 60f).coerceAtLeast(7f); textAlign = Paint.Align.CENTER }
+        c.drawText(text, w / 2, h - small.textSize, small)
+    }
+
+    private fun PdfDocument.finishStamped(p: PdfDocument.Page) { stamp(p); finishPage(p) }
+
     enum class Kind { PDF, IMAGE, TEXT, HTML, DOCX, DOC, ODT, XLSX, PPTX, RTF, OTHER }
 
     private inner class PageWriter(private val pdf: PdfDocument) {
@@ -112,7 +144,7 @@ class PdfConverter(private val workDir: File) {
             pdf.startPage(PdfDocument.PageInfo.Builder(PAGE_W, PAGE_H, ++pageNo).create())
 
         private fun endFlow() {
-            page?.let { pdf.finishPage(it) }
+            page?.let { pdf.finishStamped(it) }
             page = null
         }
 
@@ -126,7 +158,7 @@ class PdfConverter(private val workDir: File) {
             }
             val p = newPage()
             drawFitted(p.canvas, bmp)
-            pdf.finishPage(p)
+            pdf.finishStamped(p)
             bmp.recycle()
         }
 
@@ -148,7 +180,7 @@ class PdfConverter(private val workDir: File) {
                                 src.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
                                 val p = newPage()
                                 drawFitted(p.canvas, bmp, margin = 0f)
-                                pdf.finishPage(p)
+                                pdf.finishStamped(p)
                                 bmp.recycle()
                             }
                         }

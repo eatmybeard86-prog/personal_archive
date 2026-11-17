@@ -51,10 +51,10 @@ class Exporter(private val context: Context, private val repo: VaultRepository) 
     }
 
     /** Будує один PDF з усіх (або вибраних) вкладень документа. */
-    suspend fun buildPdf(doc: Document, attachments: List<Attachment> = doc.attachments): File = withContext(Dispatchers.IO) {
+    suspend fun buildPdf(doc: Document, attachments: List<Attachment> = doc.attachments, watermark: String? = null): File = withContext(Dispatchers.IO) {
         val out = File(freshDir(), safeName(doc.title.ifBlank { "документ" }) + ".pdf")
         val items = attachments.map { a -> PdfConverter.Item(a) { repo.openAttachment(a).use { it.readBytes() } } }
-        PdfConverter(workDir).convert(items, out, doc.title)
+        PdfConverter(workDir).convert(items, out, doc.title, watermark)
         out
     }
 
