@@ -87,6 +87,9 @@ dependencies {
     // Сканер QR-кодів і штрихкодів (без дозволу на камеру) та генерація QR для передачі документів.
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
     implementation("com.google.zxing:core:3.5.3")
+    // Фото того, хто ввів неправильний пароль (журнал доступу).
+    implementation("androidx.camera:camera-camera2:1.4.1")
+    implementation("androidx.camera:camera-lifecycle:1.4.1")
     // Розпізнавання тексту в сканах (українська + англійська), повністю на пристрої.
     implementation("cz.adaptech.tesseract4android:tesseract4android:4.7.0")
 

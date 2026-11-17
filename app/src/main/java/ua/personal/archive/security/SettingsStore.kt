@@ -65,6 +65,11 @@ class SettingsStore(context: Context) {
     val lockOnScreenOff: StateFlow<Boolean> = _lockOnScreenOff.asStateFlow()
     fun setLockOnScreenOff(v: Boolean) { prefs.edit().putBoolean("lock_screen_off", v).apply(); _lockOnScreenOff.value = v }
 
+    private val _intruderPhoto = MutableStateFlow(prefs.getBoolean("intruder_photo", false))
+    /** Фотографувати фронтальною камерою після неправильного пароля. */
+    val intruderPhoto: StateFlow<Boolean> = _intruderPhoto.asStateFlow()
+    fun setIntruderPhoto(v: Boolean) { prefs.edit().putBoolean("intruder_photo", v).apply(); _intruderPhoto.value = v }
+
     fun setAutoLockSeconds(v: Int) { prefs.edit().putInt("auto_lock", v).apply(); _autoLockSeconds.value = v }
 
     private inline fun <reified T : Enum<T>> enumOr(name: String?, default: T): T =

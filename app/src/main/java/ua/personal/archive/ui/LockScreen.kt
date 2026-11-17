@@ -50,6 +50,18 @@ fun LockScreen(activity: FragmentActivity) {
     val method by app.settings.lockMethod.collectAsStateWithLifecycle()
     var error by remember { mutableStateOf<String?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
+    // Неправильний пароль → запис у журнал доступу, за бажанням — з фото фронтальною камерою.
+    fun tryUnlock(input: CharArray): Boolean {
+        val ok = lock.unlockWithPassword(input)
+        if (!ok) {
+            if (app.settings.intruderPhoto.value) {
+                ua.personal.archive.security.IntruderCamera.capture(activity) { jpeg, rot ->
+                    app.accessLog.add(ua.personal.archive.security.AccessLog.Kind.WRONG, "пароль / PIN", jpeg, rot)
+                }
+            } else app.accessLog.add(ua.personal.archive.security.AccessLog.Kind.WRONG, "пароль / PIN")
+        }
+        return ok
+    }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -94,7 +106,7 @@ fun LockScreen(activity: FragmentActivity) {
                             Spacer(Modifier.height(16.dp))
                             PasswordEntry(
                                 biometric = false, onBiometric = {},
-                                onSubmit = { lock.unlockWithPassword(it) },
+                                onSubmit = { tryUnlock(it) },
                                 waitMs = { lock.password.waitMs() },
                                 label = "PIN",
                             )
@@ -104,7 +116,7 @@ fun LockScreen(activity: FragmentActivity) {
                 else -> PasswordEntry(
                     biometric = method == LockMethod.PASSWORD_BIOMETRIC && lock.biometricAvailable(),
                     onBiometric = { lock.promptSystem(activity) { error = it } },
-                    onSubmit = { lock.unlockWithPassword(it) },
+                    onSubmit = { tryUnlock(it) },
                     waitMs = { lock.password.waitMs() },
                 )
             }

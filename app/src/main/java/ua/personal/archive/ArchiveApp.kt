@@ -17,6 +17,7 @@ import ua.personal.archive.util.Exporter
 class ArchiveApp : Application() {
     lateinit var settings: SettingsStore
     lateinit var lock: AppLock
+    val accessLog by lazy { ua.personal.archive.security.AccessLog(this) { VaultCrypto(this) } }
     val repo by lazy { VaultRepository(this) { VaultCrypto(this) } }
     val exporter by lazy { Exporter(this, repo) }
     /** Фонове розпізнавання тексту в сканах для пошуку. */
@@ -30,6 +31,13 @@ class ArchiveApp : Application() {
         settings = SettingsStore(this)
         lock = AppLock(this, settings, PasswordStore(this))
         ProcessLifecycleOwner.get().lifecycle.addObserver(lock)
+        // Успішні входи пишемо одразу; неправильні — з екрана блокування (там же робиться фото).
+        lock.onAccess = { kind, method ->
+            when (kind) {
+                "MAIN" -> accessLog.add(ua.personal.archive.security.AccessLog.Kind.UNLOCK, method)
+                "DURESS" -> accessLog.add(ua.personal.archive.security.AccessLog.Kind.DURESS, method)
+            }
+        }
         // Екран погас (тайм-аут або кнопка живлення) — блокуємо одразу, навіть якщо відкрита камера.
         ContextCompat.registerReceiver(
             this,

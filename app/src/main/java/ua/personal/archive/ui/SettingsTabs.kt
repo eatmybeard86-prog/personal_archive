@@ -1,5 +1,6 @@
 package ua.personal.archive.ui
 
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Switch
@@ -111,7 +112,7 @@ private fun RadioRow(selected: Boolean, title: String, subtitle: String? = null,
 /** Вкладка «Безпека»: спосіб входу, автоблокування, резервні копії. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun SecurityTab(onBackup: () -> Unit) {
+fun SecurityTab(onBackup: () -> Unit, onAccessLog: () -> Unit = {}) {
     val app = LocalApp.current
     val lock = app.lock
     val realMethod by app.settings.lockMethod.collectAsStateWithLifecycle()
@@ -123,6 +124,13 @@ fun SecurityTab(onBackup: () -> Unit) {
     val method = if (decoy) fakeMethod ?: realMethod else realMethod
     var setPasswordFor by remember { mutableStateOf<LockMethod?>(null) }
     var duressDialog by remember { mutableStateOf(false) }
+    val intruder by app.settings.intruderPhoto.collectAsStateWithLifecycle()
+    val askCamera = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        app.settings.setIntruderPhoto(granted)
+        if (!granted) message = "Без дозволу на камеру фото не робитимуться. Його можна дати в налаштуваннях Android."
+    }
     var message by remember { mutableStateOf<String?>(null) }
 
     fun choose(m: LockMethod) {
@@ -187,6 +195,21 @@ fun SecurityTab(onBackup: () -> Unit) {
                 }
                 OutlinedButton(onClick = { lock.lockNow() }) {
                     Icon(Icons.Filled.Lock, null); Spacer(Modifier.width(8.dp)); Text("Заблокувати зараз")
+                }
+            }
+
+            Section("Журнал доступу") {
+                NavRow(Icons.Filled.History, "Журнал доступу", "Коли відкривали додаток і хто помилявся з паролем", onAccessLog)
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable {
+                    if (intruder) app.settings.setIntruderPhoto(false) else { lock.expectingExternalActivity = true; askCamera.launch(android.Manifest.permission.CAMERA) }
+                }, verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Фото «зловмисника»")
+                        Text("Після неправильного пароля чи PIN — тихе фото фронтальною камерою (зашифроване)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = intruder, onCheckedChange = {
+                        if (!it) app.settings.setIntruderPhoto(false) else { lock.expectingExternalActivity = true; askCamera.launch(android.Manifest.permission.CAMERA) }
+                    })
                 }
             }
 

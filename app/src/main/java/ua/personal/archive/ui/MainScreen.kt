@@ -56,6 +56,7 @@ fun MainScreen(
     onBackup: () -> Unit,
     onSections: () -> Unit,
     onScan: (String) -> Unit,
+    onAccessLog: () -> Unit = {},
 ) {
     var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
     var folderCategory by rememberSaveable { mutableStateOf<String?>(null) }
@@ -115,7 +116,7 @@ fun MainScreen(
                     onSettings = { tab = Tab.MORE },
                 )
                 Tab.FOLDERS -> FoldersTab(folderCategory, { folderCategory = it }, onOpen, onSections)
-                Tab.SECURITY -> SecurityTab(onBackup)
+                Tab.SECURITY -> SecurityTab(onBackup, onAccessLog)
                 Tab.MORE -> MoreTab(onBackup, onReceive = { receiving = true })
             }
         }

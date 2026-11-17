@@ -66,9 +66,13 @@ class AppLock(
     /** Позначає додаток розблокованим одразу після першого налаштування пароля. */
     fun unlockedBySetup() { _decoy.value = false; _locked.value = false }
 
+    /** Запис у журнал доступу (задається з ArchiveApp). */
+    var onAccess: ((kind: String, method: String) -> Unit)? = null
+
     fun unlockWithPassword(input: CharArray): Boolean {
         val r = password.check(input)
         input.fill('\u0000')
+        onAccess?.invoke(r.name, "пароль / PIN")
         when (r) {
             PasswordStore.Check.MAIN -> { _decoy.value = false; _locked.value = false }
             PasswordStore.Check.DURESS -> { _decoy.value = true; _locked.value = false }
@@ -95,6 +99,7 @@ class AppLock(
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                 _decoy.value = false
                 _locked.value = false
+                onAccess?.invoke("MAIN", "біометрія / PIN пристрою")
             }
 
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
