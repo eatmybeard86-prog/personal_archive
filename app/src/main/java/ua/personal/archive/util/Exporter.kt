@@ -58,6 +58,26 @@ class Exporter(private val context: Context, private val repo: VaultRepository) 
         out
     }
 
+    /** Пакет документів (наприклад, «для візи») одним PDF з обкладинкою і змістом. */
+    suspend fun buildBundle(title: String, docs: List<Document>, watermark: String?): File = withContext(Dispatchers.IO) {
+        val out = File(freshDir(), safeName(title.ifBlank { "Пакет документів" }) + ".pdf")
+        val date = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT).format(java.util.Date())
+        val cover = buildList {
+            add(ua.personal.archive.reader.TextItem("\n\n\n"))
+            add(ua.personal.archive.reader.TextItem(title.ifBlank { "Пакет документів" }, align = ua.personal.archive.reader.TextItem.ALIGN_CENTER, heading = 1))
+            add(ua.personal.archive.reader.TextItem("Сформовано $date", align = ua.personal.archive.reader.TextItem.ALIGN_CENTER))
+            add(ua.personal.archive.reader.TextItem("\n"))
+            add(ua.personal.archive.reader.TextItem("Зміст", heading = 2))
+            docs.forEachIndexed { i, d ->
+                val extra = listOfNotNull(d.number.ifBlank { null }, "файлів: ${d.attachments.size}").joinToString(" · ")
+                add(ua.personal.archive.reader.TextItem("${i + 1}. ${d.title}  ($extra)"))
+            }
+        }
+        val items = docs.flatMap { d -> d.attachments.map { a -> PdfConverter.Item(a) { repo.openAttachment(a).use { it.readBytes() } } } }
+        PdfConverter(workDir).convert(items, out, title, watermark, cover)
+        out
+    }
+
     fun shareFiles(files: List<File>, subject: String) {
         if (files.isEmpty()) return
         val uris = ArrayList(files.map(::uriFor))

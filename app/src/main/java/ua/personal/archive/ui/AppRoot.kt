@@ -64,6 +64,7 @@ private fun Unlocked(app: ArchiveApp) {
                     onSections = { nav.navigate("sections") },
                     onScan = { c -> nav.navigate("edit?id=&cat=$c&scan=1") },
                     onAccessLog = { nav.navigate("accesslog") },
+                    onBundle = { nav.navigate("bundle") },
                 )
             }
             composable(
@@ -115,6 +116,7 @@ private fun Unlocked(app: ArchiveApp) {
                     show = true,
                 )
             }
+            composable("bundle") { BundleScreen(onBack = back) }
             composable("accesslog") { AccessLogScreen(onBack = back) }
             composable("backup") { BackupScreen(onBack = back) }
             composable("sections") { SectionsScreen(onBack = back) }

@@ -1,5 +1,6 @@
 package ua.personal.archive.ui
 
+import androidx.compose.material.icons.filled.PictureAsPdf
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.QrCodeScanner
@@ -329,7 +330,7 @@ fun SecurityTab(onBackup: () -> Unit, onAccessLog: () -> Unit = {}) {
 /** Вкладка «Більше»: оформлення, читалка, про додаток. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun MoreTab(onBackup: () -> Unit, onReceive: () -> Unit = {}) {
+fun MoreTab(onBackup: () -> Unit, onReceive: () -> Unit = {}, onBundle: () -> Unit = {}) {
     val app = LocalApp.current
     val mode by app.settings.themeMode.collectAsStateWithLifecycle()
     val palette by app.settings.palette.collectAsStateWithLifecycle()
@@ -341,6 +342,7 @@ fun MoreTab(onBackup: () -> Unit, onReceive: () -> Unit = {}) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Section("Передача документів") {
+                NavRow(Icons.Filled.PictureAsPdf, "Пакет документів одним PDF", "Наприклад, «для візи»: обкладинка, зміст і всі файли", onBundle)
                 NavRow(Icons.Filled.QrCodeScanner, "Отримати документ", "Відскануйте QR-код з іншого телефона (в одній мережі Wi-Fi)", onReceive)
             }
 

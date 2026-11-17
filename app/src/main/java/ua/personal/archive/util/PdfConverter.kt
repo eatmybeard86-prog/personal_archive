@@ -51,16 +51,18 @@ class PdfConverter(private val workDir: File) {
     data class Item(val attachment: Attachment, val source: Source)
 
     /** [watermark] — напис навскіс на кожній сторінці (наприклад, «Копія для банку, 17.11.2026»). */
-    fun convert(items: List<Item>, output: File, title: String, watermark: String? = null) {
+    fun convert(items: List<Item>, output: File, title: String, watermark: String? = null, cover: List<ReaderItem>? = null) {
         this.watermark = watermark?.trim()?.ifEmpty { null }
         // Один PDF без змін (і без водяного знака) — віддаємо оригінал без втрати якості.
-        if (this.watermark == null && items.size == 1 && kindOf(items[0].attachment) == Kind.PDF) {
+        if (this.watermark == null && cover == null && items.size == 1 && kindOf(items[0].attachment) == Kind.PDF) {
             output.writeBytes(items[0].source.bytes())
             return
         }
         val pdf = PdfDocument()
         try {
             val writer = PageWriter(pdf)
+            // Обкладинка пакета документів — окрема перша сторінка.
+            if (cover != null) { writer.flow(cover, null); writer.breakPage() }
             if (items.isEmpty()) writer.flow(listOf(TextItem("$title\n\n(документ не містить файлів)")), null)
             for (item in items) {
                 val a = item.attachment
@@ -147,6 +149,8 @@ class PdfConverter(private val workDir: File) {
             page?.let { pdf.finishStamped(it) }
             page = null
         }
+
+        fun breakPage() = endFlow()
 
         fun imagePage(bytes: ByteArray, name: String) {
             endFlow()
