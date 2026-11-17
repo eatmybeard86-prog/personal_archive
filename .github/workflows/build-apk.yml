@@ -1,0 +1,66 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Prepare signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/archive.jks"
+            echo "SIGNING_KEYSTORE_FILE=$RUNNER_TEMP/archive.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Секрет SIGNING_KEYSTORE_BASE64 не задано — APK підписано тимчасовим ключем, оновлення поверх не встановиться."
+          fi
+
+      - name: Test and build APK
+        env:
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+        run: ./gradlew testReleaseUnitTest assembleRelease --no-daemon --stacktrace
+
+      - name: Rename APK
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/release/app-release.apk out/MyDocuments-${{ github.run_number }}.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyDocuments-apk-${{ github.run_number }}
+          path: out/*.apk
+
+      # Кожна збірка публікується як реліз, щоб APK можна було завантажити прямо з телефона.
+      # Збірки з PR позначаються як попередні (pre-release).
+      - name: Publish release
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          target_commitish: ${{ github.event.pull_request.head.sha || github.sha }}
+          name: Мої документи, збірка ${{ github.run_number }}
+          prerelease: ${{ github.event_name == 'pull_request' }}
+          make_latest: ${{ github.event_name != 'pull_request' }}
+          body: |
+            Завантажте файл MyDocuments-${{ github.run_number }}.apk нижче та відкрийте його на телефоні,
+            щоб встановити (може знадобитися дозвіл «Встановлювати з невідомих джерел»).
+          files: out/*.apk
