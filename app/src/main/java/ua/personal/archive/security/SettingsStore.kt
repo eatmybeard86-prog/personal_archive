@@ -48,7 +48,12 @@ class SettingsStore(context: Context) {
     private val _palette = MutableStateFlow(enumOr(prefs.getString("palette", null), Palette.NAVY))
     val palette: StateFlow<Palette> = _palette.asStateFlow()
 
-    private val _autoLockSeconds = MutableStateFlow(prefs.getInt("auto_lock", 30))
+    init {
+        // З версії 21 за замовчуванням: згорнули додаток — при поверненні знову вхід (одноразово для старих налаштувань).
+        if (!prefs.getBoolean("lock_default_v2", false)) prefs.edit().putInt("auto_lock", 0).putBoolean("lock_default_v2", true).apply()
+    }
+
+    private val _autoLockSeconds = MutableStateFlow(prefs.getInt("auto_lock", 0))
     val autoLockSeconds: StateFlow<Int> = _autoLockSeconds.asStateFlow()
 
     private val _lockMethod = MutableStateFlow(enumOr(prefs.getString("lock_method", null), LockMethod.DEVICE))
