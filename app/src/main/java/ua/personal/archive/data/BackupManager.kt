@@ -157,7 +157,7 @@ class BackupManager(private val context: Context, private val repo: VaultReposit
     }
 
     /** Імпортує документи з копії. Документи, які вже є в сховищі (той самий id), пропускаються. */
-    suspend fun import(
+    suspend fun restore(
         source: Uri,
         password: CharArray,
         categories: Set<Category>?,
@@ -201,7 +201,7 @@ class BackupManager(private val context: Context, private val repo: VaultReposit
     }
 
     /** Проходить файли внутрішнього архіву; [visit] повертає false, щоб зупинитися. */
-    private fun readInner(source: Uri, password: CharArray, visit: (String, InputStream) -> Boolean) {
+    private suspend fun readInner(source: Uri, password: CharArray, visit: suspend (String, InputStream) -> Boolean) {
         val input = context.contentResolver.openInputStream(source) ?: error("Не вдалося відкрити файл")
         input.use { raw ->
             try {

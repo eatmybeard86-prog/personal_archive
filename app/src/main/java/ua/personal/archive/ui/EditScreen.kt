@@ -86,7 +86,7 @@ fun EditScreen(docId: String?, initialCategory: Category? = null, onDone: (Strin
     var confirmExit by remember { mutableStateOf(false) }
     var cameraFile by remember { mutableStateOf<File?>(null) }
 
-    fun import(uris: List<Uri>, deleteAfter: File? = null, name: String? = null) {
+    fun importUris(uris: List<Uri>, deleteAfter: File? = null, name: String? = null) {
         if (uris.isEmpty()) return
         busy = true
         scope.launch {
@@ -106,13 +106,13 @@ fun EditScreen(docId: String?, initialCategory: Category? = null, onDone: (Strin
         }
     }
 
-    val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { import(it) }
-    val pickImages = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { import(it) }
+    val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { importUris(it) }
+    val pickImages = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { importUris(it) }
     val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val f = cameraFile
         if (ok && f != null && f.length() > 0) {
             val n = "Фото ${java.text.SimpleDateFormat("yyyy-MM-dd HH-mm-ss", java.util.Locale.ROOT).format(java.util.Date())}.jpg"
-            import(listOf(Uri.fromFile(f)), deleteAfter = f, name = n)
+            importUris(listOf(Uri.fromFile(f)), deleteAfter = f, name = n)
         } else f?.delete()
     }
 

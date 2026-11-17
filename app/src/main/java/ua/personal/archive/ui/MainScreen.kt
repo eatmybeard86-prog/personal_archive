@@ -8,7 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.GppGood
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.FloatingActionButton
@@ -33,7 +33,7 @@ import ua.personal.archive.data.Category
 enum class Tab(val title: String, val icon: ImageVector) {
     HOME("Головна", Icons.Filled.Home),
     FOLDERS("Папки", Icons.Filled.Folder),
-    SECURITY("Безпека", Icons.Filled.GppGood),
+    SECURITY("Безпека", Icons.Filled.Security),
     MORE("Більше", Icons.Filled.Menu),
 }
 

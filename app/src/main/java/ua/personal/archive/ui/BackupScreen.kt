@@ -240,7 +240,7 @@ fun BackupScreen(onBack: () -> Unit) {
                     progress = 0f
                     scope.launch {
                         message = try {
-                            val r = backup.import(uri, pwd, cats) { progress = it }
+                            val r = backup.restore(uri, pwd, cats) { progress = it }
                             "Відновлено документів: ${r.imported} (файлів: ${r.files})." +
                                 if (r.skipped > 0) "\nПропущено (вже є в додатку): ${r.skipped}." else ""
                         } catch (e: Exception) {

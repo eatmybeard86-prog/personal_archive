@@ -24,8 +24,8 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.TextDecrease
-import androidx.compose.material.icons.outlined.TextIncrease
+import androidx.compose.material.icons.outlined.ZoomOut
+import androidx.compose.material.icons.outlined.ZoomIn
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -115,8 +115,8 @@ fun ViewerScreen(docId: String, attachmentId: String, onBack: () -> Unit) {
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Назад") } },
                 actions = {
                     if (reader?.paged == false) {
-                        IconButton(onClick = { textScale = (textScale / 1.15f).coerceAtLeast(0.6f) }) { Icon(Icons.Outlined.TextDecrease, "Менший шрифт") }
-                        IconButton(onClick = { textScale = (textScale * 1.15f).coerceAtMost(3f) }) { Icon(Icons.Outlined.TextIncrease, "Більший шрифт") }
+                        IconButton(onClick = { textScale = (textScale / 1.15f).coerceAtLeast(0.6f) }) { Icon(Icons.Outlined.ZoomOut, "Менший шрифт") }
+                        IconButton(onClick = { textScale = (textScale * 1.15f).coerceAtMost(3f) }) { Icon(Icons.Outlined.ZoomIn, "Більший шрифт") }
                     }
                     Box {
                         IconButton(onClick = { themeMenu = true }) { Icon(Icons.Outlined.Palette, "Колір сторінки") }
