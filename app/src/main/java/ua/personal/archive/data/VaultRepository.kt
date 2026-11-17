@@ -33,9 +33,16 @@ class VaultRepository(private val context: Context, cryptoFactory: () -> VaultCr
     // Ключі з Android Keystore завантажуються ліниво й лише у фоновому потоці.
     private val crypto by lazy(cryptoFactory)
 
-    private val root = File(context.filesDir, "vault").apply { mkdirs() }
-    private val blobs = File(root, "blobs").apply { mkdirs() }
-    private val indexFile = File(root, "index.bin")
+    /** Тека сховища: справжнє — files/vault, «тривожне» (порожнє) — files/vault2. */
+    private class Vault(val root: File) {
+        val blobs = File(root, "blobs").apply { mkdirs() }
+        val indexFile = File(root, "index.bin")
+    }
+
+    @Volatile private var vault = Vault(File(context.filesDir, "vault").apply { mkdirs() })
+    @Volatile private var decoyMode = false
+    private val blobs get() = vault.blobs
+    private val indexFile get() = vault.indexFile
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val mutex = Mutex()
 
@@ -50,6 +57,21 @@ class VaultRepository(private val context: Context, cryptoFactory: () -> VaultCr
 
     private val _loadError = MutableStateFlow<String?>(null)
     val loadError: StateFlow<String?> = _loadError.asStateFlow()
+
+    /**
+     * Перемикає між справжнім і «тривожним» сховищем. Викликається одразу після розблокування,
+     * до показу будь-яких даних: стан у пам'яті очищується, тож документи іншого сховища не з'являються.
+     */
+    @Synchronized
+    fun useVault(decoy: Boolean) {
+        if (decoy == decoyMode) return
+        decoyMode = decoy
+        vault = Vault(File(context.filesDir, if (decoy) "vault2" else "vault").apply { mkdirs() })
+        _documents.value = emptyList()
+        _sections.value = Category.defaults
+        _loadError.value = null
+        _loaded.value = false
+    }
 
     suspend fun load() = withContext(Dispatchers.IO) {
         mutex.withLock {
@@ -169,8 +191,10 @@ class VaultRepository(private val context: Context, cryptoFactory: () -> VaultCr
 
     private suspend fun mutateAll(change: (List<Document>, List<Section>) -> Pair<List<Document>, List<Section>>): Unit = withContext(Dispatchers.IO) {
         mutex.withLock {
+            val v = vault
             val (docs, sections) = change(_documents.value, _sections.value)
-            writeIndex(VaultIndex(documents = docs, sections = sections))
+            if (v !== vault) return@withLock // сховище перемкнули під час зміни — нічого не пишемо
+            writeIndex(v, VaultIndex(documents = docs, sections = sections))
             _documents.value = docs
             _sections.value = sections
         }
@@ -183,13 +207,13 @@ class VaultRepository(private val context: Context, cryptoFactory: () -> VaultCr
     }
 
     /** Атомарний запис: спершу у тимчасовий файл, потім перейменування. */
-    private fun writeIndex(index: VaultIndex) {
+    private fun writeIndex(v: Vault, index: VaultIndex) {
         val plain = json.encodeToString(VaultIndex.serializer(), index).encodeToByteArray()
-        val tmp = File(root, "index.tmp")
+        val tmp = File(v.root, "index.tmp")
         tmp.writeBytes(crypto.seal(plain, INDEX_LABEL))
-        if (!tmp.renameTo(indexFile)) {
-            indexFile.delete()
-            check(tmp.renameTo(indexFile)) { "Не вдалося зберегти індекс" }
+        if (!tmp.renameTo(v.indexFile)) {
+            v.indexFile.delete()
+            check(tmp.renameTo(v.indexFile)) { "Не вдалося зберегти індекс" }
         }
     }
 

@@ -86,6 +86,20 @@ fun LockScreen(activity: FragmentActivity) {
                         Spacer(Modifier.size(8.dp))
                         Text("Розблокувати")
                     }
+                    // Якщо задано тривожний PIN, його можна ввести й без пароля додатку.
+                    if (lock.password.duressSet) {
+                        var pinMode by remember { mutableStateOf(false) }
+                        if (!pinMode) TextButton(onClick = { pinMode = true }) { Text("Ввести PIN") }
+                        else {
+                            Spacer(Modifier.height(16.dp))
+                            PasswordEntry(
+                                biometric = false, onBiometric = {},
+                                onSubmit = { lock.unlockWithPassword(it) },
+                                waitMs = { lock.password.waitMs() },
+                                label = "PIN",
+                            )
+                        }
+                    }
                 }
                 else -> PasswordEntry(
                     biometric = method == LockMethod.PASSWORD_BIOMETRIC && lock.biometricAvailable(),
@@ -149,6 +163,7 @@ private fun PasswordEntry(
     onBiometric: () -> Unit,
     onSubmit: (CharArray) -> Boolean,
     waitMs: () -> Long,
+    label: String = "Пароль",
 ) {
     var value by remember { mutableStateOf("") }
     var err by remember { mutableStateOf<String?>(null) }
@@ -160,12 +175,12 @@ private fun PasswordEntry(
     fun submit() {
         if (wait > 0 || value.isEmpty()) return
         if (!onSubmit(value.toCharArray())) {
-            err = "Неправильний пароль"
+            err = if (label == "Пароль") "Неправильний пароль" else "Неправильний PIN"
             wait = waitMs()
         }
         value = ""
     }
-    PasswordField(value, { value = it; err = null }, "Пароль", ImeAction.Done, enabled = wait == 0L) { submit() }
+    PasswordField(value, { value = it; err = null }, label, ImeAction.Done, enabled = wait == 0L) { submit() }
     if (wait > 0) Text("Забагато спроб. Зачекайте ${wait / 1000 + 1} с", color = MaterialTheme.colorScheme.error)
     err?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     Spacer(Modifier.height(16.dp))

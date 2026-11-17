@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.CompositionLocalProvider
@@ -23,7 +24,12 @@ fun AppRoot(app: ArchiveApp, activity: FragmentActivity) {
     val locked by app.lock.locked.collectAsStateWithLifecycle()
     CompositionLocalProvider(LocalApp provides app) {
         LaunchedEffect(locked) { if (locked) clearThumbnails() }
-        if (locked) LockScreen(activity) else Unlocked(app)
+        if (locked) LockScreen(activity) else {
+            val decoy by app.lock.decoy.collectAsStateWithLifecycle()
+            // Перемикаємо сховище ще до першого кадру, щоб дані іншого сховища не промайнули.
+            remember(decoy) { app.repo.useVault(decoy); decoy }
+            key(decoy) { Unlocked(app) }
+        }
     }
 }
 

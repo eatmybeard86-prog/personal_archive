@@ -68,6 +68,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.withContext
 import ua.personal.archive.ArchiveApp
 import ua.personal.archive.data.Attachment
+import ua.personal.archive.reader.CompositeDoc
 import ua.personal.archive.reader.Document
 import ua.personal.archive.reader.InlineImageItem
 import ua.personal.archive.reader.PageItem
@@ -75,6 +76,7 @@ import ua.personal.archive.reader.ReaderLoader
 import ua.personal.archive.reader.ReaderTheme
 import ua.personal.archive.reader.TextItem
 import ua.personal.archive.util.Exporter
+import ua.personal.archive.util.PdfConverter
 import java.io.File
 import java.util.UUID
 
@@ -91,7 +93,10 @@ private val renderDispatcher = Dispatchers.IO.limitedParallelism(1)
 fun ViewerScreen(docId: String, attachmentId: String, onBack: () -> Unit) {
     val app = LocalApp.current
     val doc = remember(docId) { app.repo.find(docId) }
-    val attachment = doc?.attachments?.firstOrNull { it.id == attachmentId }
+    // ALL_PAGES — усі фото й PDF документа однією стрічкою сторінок.
+    val allPages = attachmentId == ALL_PAGES
+    val pageFiles = remember(doc) { doc?.attachments.orEmpty().filter { isPageFile(it) } }
+    val attachment = if (allPages) pageFiles.firstOrNull() else doc?.attachments?.firstOrNull { it.id == attachmentId }
     var error by remember { mutableStateOf<String?>(null) }
     val themeName by app.settings.readerTheme.collectAsStateWithLifecycle()
     val theme = ReaderTheme.byName(themeName)
@@ -101,7 +106,7 @@ fun ViewerScreen(docId: String, attachmentId: String, onBack: () -> Unit) {
     val reader by produceState<Document?>(null, attachment) {
         if (attachment == null) return@produceState
         value = try {
-            open(app, attachment)
+            if (allPages) openAll(app, doc?.title ?: "", pageFiles) else open(app, attachment)
         } catch (e: Throwable) {
             error = e.message ?: "Не вдалося відкрити файл"
             null
@@ -117,7 +122,7 @@ fun ViewerScreen(docId: String, attachmentId: String, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(attachment?.name ?: "Перегляд", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text((if (allPages) doc?.title else attachment?.name) ?: "Перегляд", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Назад") } },
                 actions = {
                     if (reader?.paged == false) {
@@ -166,6 +171,30 @@ private suspend fun open(app: ArchiveApp, a: Attachment): Document = withContext
         throw e
     }
     ReaderLoader.open(file, a.name, a.mime, dir)
+}
+
+const val ALL_PAGES = "*"
+
+/** Файли, які можна показати сторінками: фото та PDF. */
+fun isPageFile(a: Attachment): Boolean =
+    PdfConverter.kindOf(a).let { it == PdfConverter.Kind.PDF || it == PdfConverter.Kind.IMAGE }
+
+private suspend fun openAll(app: ArchiveApp, title: String, list: List<Attachment>): Document = withContext(Dispatchers.IO) {
+    val root = File(app.exporter.workDir, "view-" + UUID.randomUUID()).apply { mkdirs() }
+    val parts = ArrayList<Document>()
+    try {
+        list.forEachIndexed { i, a ->
+            val dir = File(root, "p$i").apply { mkdirs() }
+            val file = File(dir, Exporter.safeName(a.name))
+            app.repo.openAttachment(a).use { input -> file.outputStream().use { input.copyTo(it) } }
+            parts += ReaderLoader.open(file, a.name, a.mime, dir)
+        }
+        CompositeDoc(title, parts, root)
+    } catch (e: Throwable) {
+        parts.forEach { runCatching { it.close() } }
+        root.deleteRecursively()
+        throw e
+    }
 }
 
 private fun ReaderTheme.composeFilter(): ColorFilter? = matrix()?.let { ColorFilter.colorMatrix(ColorMatrix(it)) }

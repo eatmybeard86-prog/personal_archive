@@ -33,6 +33,10 @@ class AppLock(
     private val _locked = MutableStateFlow(true)
     val locked: StateFlow<Boolean> = _locked.asStateFlow()
 
+    private val _decoy = MutableStateFlow(false)
+    /** true — увійшли «тривожним» PIN-ом: показується окреме порожнє сховище. */
+    val decoy: StateFlow<Boolean> = _decoy.asStateFlow()
+
     private var backgroundAt = 0L
     /** Поки відкрито системне вікно (вибір файлу, камера, надсилання), не блокуємо одразу. */
     var expectingExternalActivity = false
@@ -60,13 +64,17 @@ class AppLock(
     fun lockNow() { _locked.value = true }
 
     /** Позначає додаток розблокованим одразу після першого налаштування пароля. */
-    fun unlockedBySetup() { _locked.value = false }
+    fun unlockedBySetup() { _decoy.value = false; _locked.value = false }
 
     fun unlockWithPassword(input: CharArray): Boolean {
-        val ok = password.verify(input)
+        val r = password.check(input)
         input.fill('\u0000')
-        if (ok) _locked.value = false
-        return ok
+        when (r) {
+            PasswordStore.Check.MAIN -> { _decoy.value = false; _locked.value = false }
+            PasswordStore.Check.DURESS -> { _decoy.value = true; _locked.value = false }
+            PasswordStore.Check.WRONG -> return false
+        }
+        return true
     }
 
     /** Системне вікно біометрії (або PIN пристрою). Повертає false, якщо для обраного способу воно не потрібне. */
@@ -85,6 +93,7 @@ class AppLock(
         }
         val prompt = BiometricPrompt(activity, ContextCompat.getMainExecutor(activity), object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                _decoy.value = false
                 _locked.value = false
             }
 

@@ -60,6 +60,11 @@ class SettingsStore(context: Context) {
     fun setLockMethod(v: LockMethod) { prefs.edit().putString("lock_method", v.name).apply(); _lockMethod.value = v }
     fun setThemeMode(v: ThemeMode) { prefs.edit().putString("theme_mode", v.name).apply(); _themeMode.value = v }
     fun setPalette(v: Palette) { prefs.edit().putString("palette", v.name).apply(); _palette.value = v }
+    private val _lockOnScreenOff = MutableStateFlow(prefs.getBoolean("lock_screen_off", true))
+    /** Блокувати, щойно гасне екран (сам або кнопкою живлення). */
+    val lockOnScreenOff: StateFlow<Boolean> = _lockOnScreenOff.asStateFlow()
+    fun setLockOnScreenOff(v: Boolean) { prefs.edit().putBoolean("lock_screen_off", v).apply(); _lockOnScreenOff.value = v }
+
     fun setAutoLockSeconds(v: Int) { prefs.edit().putInt("auto_lock", v).apply(); _autoLockSeconds.value = v }
 
     private inline fun <reified T : Enum<T>> enumOr(name: String?, default: T): T =

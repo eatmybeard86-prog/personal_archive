@@ -1,5 +1,7 @@
 package ua.personal.archive.ui
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -64,13 +66,18 @@ fun FoldersTab(category: String?, onCategory: (String?) -> Unit, onOpen: (String
     val loaded by app.repo.loaded.collectAsStateWithLifecycle()
     val loadError by app.repo.loadError.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
+    var onlyFavorites by rememberSaveable { mutableStateOf(false) }
+    var tag by rememberSaveable { mutableStateOf<String?>(null) }
+    val allTags = remember(docs) { docs.flatMap { it.tags }.distinctBy { it.lowercase() }.sortedBy { it.lowercase() } }
 
-    val filtered = remember(docs, query, category) {
+    val filtered = remember(docs, query, category, onlyFavorites, tag) {
         val q = query.trim().lowercase()
         docs.filter { d ->
             (category == null || d.sectionId == category) &&
+                (!onlyFavorites || d.favorite) &&
+                (tag == null || d.tags.any { it.equals(tag, ignoreCase = true) }) &&
                 (q.isEmpty() || d.title.lowercase().contains(q) || d.number.lowercase().contains(q) ||
-                    d.note.lowercase().contains(q) || d.attachments.any { it.name.lowercase().contains(q) })
+                    d.note.lowercase().contains(q) || d.tags.any { it.lowercase().contains(q) } || d.attachments.any { it.name.lowercase().contains(q) })
         }.sortedByDescending { it.updatedAt }
     }
     val expiring = remember(docs) { docs.count { it.expiresAt != null && daysLeft(it.expiresAt) <= 60 } }
@@ -105,6 +112,24 @@ fun FoldersTab(category: String?, onCategory: (String?) -> Unit, onOpen: (String
                         onClick = { onCategory(if (category == c.id) null else c.id) },
                         label = { Text(if (n > 0) "${c.title} ($n)" else c.title) },
                         leadingIcon = { Icon(c.iconVector, null, Modifier.size(18.dp), tint = c.tint) },
+                    )
+                }
+            }
+            // Обране й теги
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                val favCount = docs.count { it.favorite }
+                FilterChip(
+                    selected = onlyFavorites, onClick = { onlyFavorites = !onlyFavorites },
+                    label = { Text(if (favCount > 0) "Обране ($favCount)" else "Обране") },
+                    leadingIcon = { Icon(Icons.Filled.Star, null, Modifier.size(18.dp), tint = Color(0xFFFBBF24)) },
+                )
+                allTags.forEach { t ->
+                    FilterChip(
+                        selected = tag == t, onClick = { tag = if (tag == t) null else t },
+                        label = { Text("#$t") },
                     )
                 }
             }
@@ -157,7 +182,10 @@ fun DocumentCard(doc: Document, onClick: () -> Unit) {
             FileBadge(doc.attachments.firstOrNull())
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(doc.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (doc.favorite) { Icon(Icons.Filled.Star, "Обране", Modifier.size(16.dp), tint = Color(0xFFFBBF24)); Spacer(Modifier.width(4.dp)) }
+                    Text(doc.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
                 val size = doc.attachments.sumOf { it.size }
                 val sub = listOfNotNull(
                     LocalApp.current.repo.section(doc.sectionId).title,
@@ -165,6 +193,10 @@ fun DocumentCard(doc: Document, onClick: () -> Unit) {
                     relativeDate(doc.updatedAt),
                 ).joinToString("  •  ")
                 Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (doc.tags.isNotEmpty()) Text(
+                    doc.tags.joinToString("  ") { "#$it" }, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
                 doc.expiresAt?.let {
                     Spacer(Modifier.height(2.dp))
                     Text(

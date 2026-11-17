@@ -1,5 +1,9 @@
 package ua.personal.archive.ui
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -78,10 +82,12 @@ fun EditScreen(docId: String?, initialCategory: String? = null, autoScan: Boolea
 
     var title by remember { mutableStateOf(original?.title.orEmpty()) }
     val sections = rememberSections()
+    val docsForTags by repo.documents.collectAsStateWithLifecycle()
     val defaultSection = original?.sectionId ?: initialCategory ?: sections.firstOrNull()?.id ?: Category.OTHER.name
     var category by remember { mutableStateOf(defaultSection) }
     var number by remember { mutableStateOf(original?.number.orEmpty()) }
     var note by remember { mutableStateOf(original?.note.orEmpty()) }
+    var tagsText by remember { mutableStateOf(original?.tags.orEmpty().joinToString(", ")) }
     var expiresAt by remember { mutableStateOf(original?.expiresAt) }
     val attachments = remember { mutableStateListOf<Attachment>().apply { original?.attachments?.let(::addAll) } }
     val added = remember { mutableStateListOf<Attachment>() }
@@ -150,6 +156,7 @@ fun EditScreen(docId: String?, initialCategory: String? = null, autoScan: Boolea
 
     val dirty = title != original?.title.orEmpty() || added.isNotEmpty() || category != defaultSection ||
         number != original?.number.orEmpty() || note != original?.note.orEmpty() || expiresAt != original?.expiresAt ||
+        parseTags(tagsText) != original?.tags.orEmpty() || attachments.map { it.id } != original?.attachments.orEmpty().map { it.id } ||
         attachments.size != (original?.attachments?.size ?: 0)
 
     fun cancel() {
@@ -164,7 +171,7 @@ fun EditScreen(docId: String?, initialCategory: String? = null, autoScan: Boolea
         scope.launch {
             val now = System.currentTimeMillis()
             val doc = (original ?: Document(id = UUID.randomUUID().toString(), title = "", section = category, createdAt = now, updatedAt = now))
-                .copy(title = title.trim(), section = category, number = number.trim(), note = note.trim(), expiresAt = expiresAt, attachments = attachments.toList())
+                .copy(title = title.trim(), section = category, number = number.trim(), note = note.trim(), expiresAt = expiresAt, attachments = attachments.toList(), tags = parseTags(tagsText))
             try {
                 repo.save(doc)
                 // Файли, які прибрали з документа, видаляються зі сховища.
@@ -221,6 +228,25 @@ fun EditScreen(docId: String?, initialCategory: String? = null, autoScan: Boolea
             }
 
             OutlinedTextField(note, { note = it }, label = { Text("Нотатки") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                tagsText, { tagsText = it },
+                label = { Text("Теги") },
+                placeholder = { Text("через кому: сім'я, оригінал, авто") },
+                singleLine = true, modifier = Modifier.fillMaxWidth(),
+            )
+            // Підказки: теги, які вже є в інших документах.
+            val allTags = remember(docsForTags) { docsForTags.flatMap { it.tags }.distinctBy { it.lowercase() }.sorted() }
+            val current = parseTags(tagsText).map { it.lowercase() }.toSet()
+            val suggestions = allTags.filter { it.lowercase() !in current }
+            if (suggestions.isNotEmpty()) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    suggestions.forEach { t ->
+                        FilterChip(selected = false, onClick = {
+                            tagsText = (parseTags(tagsText) + t).joinToString(", ")
+                        }, label = { Text("+ $t") })
+                    }
+                }
+            }
 
             HorizontalDivider()
             Text("Файли (${attachments.size})", style = MaterialTheme.typography.titleSmall)
@@ -261,13 +287,22 @@ fun EditScreen(docId: String?, initialCategory: String? = null, autoScan: Boolea
                 "Можна вибрати кілька файлів одразу. Також файл можна надіслати сюди з будь-якого додатку через «Поділитися» → «Мої документи».",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            attachments.forEach { a ->
+            if (attachments.size > 1) Text(
+                "Порядок файлів — це порядок сторінок (стрілками ↑↓). Наприклад, усі сторінки паспорта можна зберегти в одному документі.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            attachments.forEachIndexed { i, a ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (attachments.size > 1) Text("${i + 1}.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(22.dp))
                     FileBadge(a, 36.dp)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(a.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(PdfConverter.formatSize(a.size), style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (attachments.size > 1) {
+                        IconButton(onClick = { attachments.add(i - 1, attachments.removeAt(i)) }, enabled = i > 0) { Icon(Icons.Outlined.KeyboardArrowUp, "Вище") }
+                        IconButton(onClick = { attachments.add(i + 1, attachments.removeAt(i)) }, enabled = i < attachments.size - 1) { Icon(Icons.Outlined.KeyboardArrowDown, "Нижче") }
                     }
                     IconButton(onClick = { attachments.remove(a) }) { Icon(Icons.Outlined.Close, "Прибрати") }
                 }

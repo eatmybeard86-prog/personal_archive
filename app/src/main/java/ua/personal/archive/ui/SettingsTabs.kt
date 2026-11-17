@@ -1,5 +1,7 @@
 package ua.personal.archive.ui
 
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.material3.Switch
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -111,14 +113,21 @@ private fun RadioRow(selected: Boolean, title: String, subtitle: String? = null,
 fun SecurityTab(onBackup: () -> Unit) {
     val app = LocalApp.current
     val lock = app.lock
-    val method by app.settings.lockMethod.collectAsStateWithLifecycle()
+    val realMethod by app.settings.lockMethod.collectAsStateWithLifecycle()
     val autoLock by app.settings.autoLockSeconds.collectAsStateWithLifecycle()
+    val screenOff by app.settings.lockOnScreenOff.collectAsStateWithLifecycle()
+    val decoy by lock.decoy.collectAsStateWithLifecycle()
+    // У «тривожному» сховищі зміни входу лише показуються, а насправді нічого не змінюють.
+    var fakeMethod by remember { mutableStateOf<LockMethod?>(null) }
+    val method = if (decoy) fakeMethod ?: realMethod else realMethod
     var setPasswordFor by remember { mutableStateOf<LockMethod?>(null) }
+    var duressDialog by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
     fun choose(m: LockMethod) {
         when {
             m == method -> Unit
+            decoy -> if (m != LockMethod.DEVICE) setPasswordFor = m else fakeMethod = m
             m == LockMethod.DEVICE && !lock.deviceLockAvailable() ->
                 message = "На пристрої не налаштовано блокування екрана чи біометрію. Спершу увімкніть їх у налаштуваннях Android."
             m == LockMethod.PASSWORD_BIOMETRIC && !lock.biometricAvailable() ->
@@ -163,6 +172,13 @@ fun SecurityTab(onBackup: () -> Unit) {
 
             Section("Автоматичне блокування") {
                 Text("Коли додаток згорнуто довше ніж:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { app.settings.setLockOnScreenOff(!screenOff) }, verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Блокувати, щойно гасне екран")
+                        Text("Сам по тайм-ауту або кнопкою живлення", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = screenOff, onCheckedChange = { app.settings.setLockOnScreenOff(it) })
+                }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(0 to "Одразу", 30 to "30 с", 60 to "1 хв", 300 to "5 хв").forEach { (s, label) ->
                         FilterChip(selected = autoLock == s, onClick = { app.settings.setAutoLockSeconds(s) }, label = { Text(label) })
@@ -173,10 +189,65 @@ fun SecurityTab(onBackup: () -> Unit) {
                 }
             }
 
+            if (!decoy) Section("«Тривожний» PIN") {
+                Text(
+                    "Якщо вас змушують відкрити додаток, введіть цей PIN замість пароля — відкриється окреме порожнє сховище. " +
+                        "Справжні документи не показуються, і ніщо не видає, що вони існують. " +
+                        "У порожнє сховище можна додати кілька несуттєвих документів для правдоподібності.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (method == LockMethod.DEVICE) Text(
+                    "Під час входу біометрією натисніть «Ввести PIN» на екрані блокування.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { duressDialog = true }) {
+                        Text(if (lock.password.duressSet) "Змінити PIN" else "Задати PIN")
+                    }
+                    if (lock.password.duressSet) TextButton(onClick = { lock.password.clearDuress(); message = "Тривожний PIN вимкнено." }) { Text("Вимкнути") }
+                }
+            }
+
             Section("Резервні копії") {
                 NavRow(Icons.Filled.Backup, "Резервні копії", "Зашифрований архів усіх документів або вибраних розділів", onBackup)
             }
         }
+    }
+
+    if (duressDialog) {
+        var pin by remember { mutableStateOf("") }
+        var pin2 by remember { mutableStateOf("") }
+        var err by remember { mutableStateOf<String?>(null) }
+        AlertDialog(
+            onDismissRequest = { duressDialog = false },
+            title = { Text("Тривожний PIN") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Мінімум 4 символи. Має відрізнятися від пароля додатку.", style = MaterialTheme.typography.bodySmall)
+                    PasswordField(pin, { pin = it; err = null }, "PIN", ImeAction.Next) {}
+                    PasswordField(pin2, { pin2 = it; err = null }, "Повторіть PIN", ImeAction.Done) {}
+                    err?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val chars = pin.toCharArray()
+                    err = when {
+                        pin.length < 4 -> "Мінімум 4 символи"
+                        pin != pin2 -> "PIN-коди не збігаються"
+                        lock.password.matchesMain(chars) -> "PIN не може збігатися з паролем додатку"
+                        else -> null
+                    }
+                    if (err == null) {
+                        lock.password.setDuress(chars)
+                        duressDialog = false
+                        message = "Тривожний PIN збережено."
+                    }
+                    chars.fill('\u0000')
+                }) { Text("Зберегти") }
+            },
+            dismissButton = { TextButton(onClick = { duressDialog = false }) { Text("Скасувати") } },
+        )
     }
 
     setPasswordFor?.let { target ->
@@ -189,9 +260,13 @@ fun SecurityTab(onBackup: () -> Unit) {
                     PasswordSetup(
                         title = if (lock.password.isSet) "Новий пароль додатку" else "Створіть пароль додатку",
                         onDone = { pwd ->
-                            lock.password.set(pwd)
+                            if (decoy) {
+                                fakeMethod = target
+                            } else {
+                                lock.password.set(pwd)
+                                app.settings.setLockMethod(target)
+                            }
                             pwd.fill('\u0000')
-                            app.settings.setLockMethod(target)
                             setPasswordFor = null
                             message = "Пароль збережено."
                         },

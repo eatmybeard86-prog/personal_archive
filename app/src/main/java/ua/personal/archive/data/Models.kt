@@ -60,6 +60,10 @@ data class Document(
     val createdAt: Long,
     val updatedAt: Long,
     val attachments: List<Attachment> = emptyList(),
+    /** Теги для швидкого пошуку (наприклад, «сім'я», «авто», «оригінал»). */
+    val tags: List<String> = emptyList(),
+    /** Позначка «Обране» — документ показується вгорі головного екрана. */
+    val favorite: Boolean = false,
 ) {
     @Transient
     val sectionId: String = section.ifEmpty { category.name }

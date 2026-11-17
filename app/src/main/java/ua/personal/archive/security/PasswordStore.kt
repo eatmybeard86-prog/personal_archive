@@ -27,7 +27,61 @@ class PasswordStore(context: Context) {
             .apply()
     }
 
-    fun clear() { prefs.edit().clear().apply() }
+    fun clear() {
+        // Тривожний PIN зберігаємо окремо — він не залежить від основного пароля.
+        prefs.edit().remove("salt").remove("hash").remove("iter").remove("fails").remove("blocked_until").apply()
+    }
+
+    // ── «Тривожний» PIN: відкриває окреме порожнє сховище ──────────────────────
+
+    val duressSet: Boolean get() = prefs.contains("duress_hash")
+
+    fun setDuress(pin: CharArray) {
+        val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
+        prefs.edit()
+            .putString("duress_salt", b64(salt))
+            .putString("duress_hash", b64(hash(pin, salt, ITERATIONS)))
+            .apply()
+    }
+
+    fun clearDuress() { prefs.edit().remove("duress_salt").remove("duress_hash").apply() }
+
+    private fun matchesDuress(input: CharArray): Boolean {
+        val salt = unb64(prefs.getString("duress_salt", null) ?: return false)
+        val expected = unb64(prefs.getString("duress_hash", null) ?: return false)
+        return MessageDigest.isEqual(expected, hash(input, salt, ITERATIONS))
+    }
+
+    /** Чи збігається [input] з основним паролем (без лічильника спроб). */
+    fun matchesMain(input: CharArray): Boolean {
+        val salt = unb64(prefs.getString("salt", null) ?: return false)
+        val expected = unb64(prefs.getString("hash", null) ?: return false)
+        return MessageDigest.isEqual(expected, hash(input, salt, prefs.getInt("iter", ITERATIONS)))
+    }
+
+    enum class Check { MAIN, DURESS, WRONG }
+
+    /**
+     * Перевіряє введене: основний пароль → справжнє сховище, тривожний PIN → порожнє.
+     * Успішний вхід тривожним PIN-ом теж скидає лічильник помилок, щоб нічим не відрізнятися.
+     */
+    fun check(input: CharArray): Check {
+        if (waitMs() > 0) return Check.WRONG
+        if (isSet && verify(input)) return Check.MAIN
+        if (duressSet && matchesDuress(input)) {
+            prefs.edit().putInt("fails", 0).putLong("blocked_until", 0).apply()
+            return Check.DURESS
+        }
+        if (!isSet) registerFail()
+        return Check.WRONG
+    }
+
+    private fun registerFail() {
+        val fails = prefs.getInt("fails", 0) + 1
+        val edit = prefs.edit().putInt("fails", fails)
+        if (fails >= 5) edit.putLong("blocked_until", System.currentTimeMillis() + (30_000L shl (fails - 5).coerceAtMost(7)).coerceAtMost(3_600_000L))
+        edit.apply()
+    }
 
     /** Скільки мілісекунд ще чекати перед наступною спробою (0 — можна вводити). */
     fun waitMs(): Long = (prefs.getLong("blocked_until", 0) - System.currentTimeMillis()).coerceAtLeast(0)

@@ -1,6 +1,11 @@
 package ua.personal.archive
 
 import android.app.Application
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ProcessLifecycleOwner
 import ua.personal.archive.crypto.VaultCrypto
 import ua.personal.archive.data.VaultRepository
@@ -23,6 +28,17 @@ class ArchiveApp : Application() {
         settings = SettingsStore(this)
         lock = AppLock(this, settings, PasswordStore(this))
         ProcessLifecycleOwner.get().lifecycle.addObserver(lock)
+        // Екран погас (тайм-аут або кнопка живлення) — блокуємо одразу, навіть якщо відкрита камера.
+        ContextCompat.registerReceiver(
+            this,
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    if (settings.lockOnScreenOff.value) lock.lockNow()
+                }
+            },
+            IntentFilter(Intent.ACTION_SCREEN_OFF),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         // Залишки тимчасових розшифрованих файлів з минулого запуску.
         cacheDir.resolve("shared").deleteRecursively()
         cacheDir.resolve("work").deleteRecursively()

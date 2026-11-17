@@ -16,6 +16,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Image
@@ -48,6 +51,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -113,6 +117,10 @@ fun DetailScreen(docId: String, onBack: () -> Unit, onEdit: () -> Unit, onView: 
                 title = { Text(doc.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Назад") } },
                 actions = {
+                    IconButton(onClick = { scope.launch { app.repo.save(doc.copy(favorite = !doc.favorite)) } }) {
+                        if (doc.favorite) Icon(Icons.Filled.Star, "Прибрати з обраного", tint = Color(0xFFFBBF24))
+                        else Icon(Icons.Outlined.StarBorder, "Додати в обране")
+                    }
                     IconButton(onClick = onEdit) { Icon(Icons.Outlined.Edit, "Редагувати") }
                     IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Outlined.Delete, "Видалити") }
                 },
@@ -143,6 +151,7 @@ fun DetailScreen(docId: String, onBack: () -> Unit, onEdit: () -> Unit, onView: 
                         )
                     }
                     if (doc.note.isNotBlank()) Field("Нотатки", doc.note)
+                    if (doc.tags.isNotEmpty()) TagRow(doc.tags)
                     Text(
                         "Додано ${formatDate(doc.createdAt)} · змінено ${formatDate(doc.updatedAt)}",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -150,6 +159,12 @@ fun DetailScreen(docId: String, onBack: () -> Unit, onEdit: () -> Unit, onView: 
                 }
             }
 
+            val pages = doc.attachments.filter { isPageFile(it) }
+            if (pages.size > 1) {
+                Button(onClick = { onView(ALL_PAGES) }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Outlined.AutoStories, null); Spacer(Modifier.width(8.dp)); Text("Переглянути всі сторінки (${pages.size})")
+                }
+            }
             if (doc.attachments.isNotEmpty()) {
                 Text("Увесь документ", style = MaterialTheme.typography.titleSmall)
                 Button(onClick = { sharePdf(doc.attachments) }, enabled = busy == null, modifier = Modifier.fillMaxWidth()) {

@@ -83,6 +83,7 @@ fun HomeTab(
     val docs by app.repo.documents.collectAsStateWithLifecycle()
     val loadError by app.repo.loadError.collectAsStateWithLifecycle()
     val recent = remember(docs) { docs.sortedByDescending { it.updatedAt }.take(6) }
+    val favorites = remember(docs) { docs.filter { it.favorite }.sortedBy { it.title.lowercase() } }
     val expiring = remember(docs) { docs.count { it.expiresAt != null && daysLeft(it.expiresAt) <= 60 } }
     val cs = MaterialTheme.colorScheme
 
@@ -128,6 +129,12 @@ fun HomeTab(
                 subtitle = loadError ?: if (expiring > 0) "Спливає строк: $expiring" else "Шифрування увімкнено",
                 onClick = onSecurity,
             )
+
+            // ── Обране ───────────────────────────────────────
+            if (favorites.isNotEmpty()) {
+                Text("★ Обране", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+                favorites.forEach { d -> DocumentCard(d) { onOpen(d.id) } }
+            }
 
             // ── Розділи ──────────────────────────────────────
             val sections = rememberSections()
