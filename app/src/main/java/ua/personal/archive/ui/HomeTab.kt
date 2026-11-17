@@ -1,6 +1,22 @@
 package ua.personal.archive.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.zIndex
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.layout.heightIn
@@ -119,17 +135,11 @@ fun HomeTab(
                 Text("Розділи", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 TextButton(onClick = onManageSections) { Text("Змінити") }
             }
-            // При великому системному шрифті — дві плитки в ряд, щоб назви вміщались.
-            val columns = if (LocalDensity.current.fontScale > 1.15f) 2 else 3
-            (sections.map<Section, Section?> { it } + null).chunked(columns).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.height(IntrinsicSize.Min)) {
-                    row.forEach { c ->
-                        if (c != null) CategoryTile(c, docs.count { it.sectionId == c.id }, Modifier.weight(1f)) { onCategory(c) }
-                        else AddSectionTile(Modifier.weight(1f), onManageSections)
-                    }
-                    repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
-                }
-            }
+            Text(
+                "Утримуйте плитку пальцем і перетягніть, щоб змінити порядок",
+                style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
+            )
+            SectionGrid(sections, docs, onCategory, onManageSections)
 
             // ── Останні документи ────────────────────────────
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -173,6 +183,94 @@ private fun StatusCard(ok: Boolean, title: String, subtitle: String, onClick: ()
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+/**
+ * Плитки розділів, які можна перетягувати пальцем: довге натискання — і плитка «піднімається»,
+ * її можна перенести на місце іншої. Новий порядок зберігається після відпускання.
+ */
+@Composable
+private fun SectionGrid(
+    sections: List<Section>,
+    docs: List<ua.personal.archive.data.Document>,
+    onCategory: (Section) -> Unit,
+    onManageSections: () -> Unit,
+) {
+    val app = LocalApp.current
+    val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
+    // Локальний порядок під час перетягування; синхронізується зі сховищем, коли нічого не тягнуть.
+    var order by remember { mutableStateOf(sections) }
+    var dragFrom by remember { mutableStateOf<Int?>(null) }
+    var dragCurrent by remember { mutableIntStateOf(-1) }
+    var dragTotal by remember { mutableStateOf(Offset.Zero) }
+    val slotBounds = remember { mutableStateMapOf<Int, Rect>() }
+    if (dragFrom == null && order != sections) order = sections
+
+    // При великому системному шрифті — дві плитки в ряд, щоб назви вміщались.
+    val columns = if (LocalDensity.current.fontScale > 1.15f) 2 else 3
+    val slots: List<Section?> = order + null
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        slots.chunked(columns).forEachIndexed { rowIndex, row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.height(IntrinsicSize.Min)) {
+                row.forEachIndexed { colIndex, c ->
+                    val slot = rowIndex * columns + colIndex
+                    if (c == null) {
+                        AddSectionTile(Modifier.weight(1f), onManageSections)
+                        return@forEachIndexed
+                    }
+                    val dragged = dragFrom != null && slot == dragCurrent
+                    val tileModifier = Modifier.weight(1f)
+                        .onGloballyPositioned { slotBounds[slot] = it.boundsInRoot() }
+                        .zIndex(if (dragged) 1f else 0f)
+                        .graphicsLayer {
+                            if (dragged) {
+                                val from = slotBounds[dragFrom ?: slot]
+                                val here = slotBounds[slot]
+                                if (from != null && here != null) {
+                                    translationX = from.left + dragTotal.x - here.left
+                                    translationY = from.top + dragTotal.y - here.top
+                                }
+                                scaleX = 1.07f; scaleY = 1.07f
+                                shadowElevation = 16f
+                            }
+                        }
+                        .pointerInput(slot) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    dragFrom = slot; dragCurrent = slot; dragTotal = Offset.Zero
+                                },
+                                onDrag = { change, amount ->
+                                    change.consume()
+                                    dragTotal += amount
+                                    val from = slotBounds[slot] ?: return@detectDragGesturesAfterLongPress
+                                    val finger = from.center + dragTotal
+                                    val target = slotBounds.entries.firstOrNull { (i, r) -> i < order.size && r.contains(finger) }?.key
+                                    if (target != null && target != dragCurrent) {
+                                        order = order.toMutableList().apply { add(target, removeAt(dragCurrent)) }
+                                        dragCurrent = target
+                                    }
+                                },
+                                onDragEnd = {
+                                    val changed = order.map { it.id } != sections.map { it.id }
+                                    val ids = order.map { it.id }
+                                    dragFrom = null; dragCurrent = -1; dragTotal = Offset.Zero
+                                    if (changed) scope.launch { app.repo.reorderSections(ids) }
+                                },
+                                onDragCancel = {
+                                    dragFrom = null; dragCurrent = -1; dragTotal = Offset.Zero
+                                    order = sections
+                                },
+                            )
+                        }
+                    CategoryTile(c, docs.count { it.sectionId == c.id }, tileModifier) { onCategory(c) }
+                }
+                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
     }
 }
 

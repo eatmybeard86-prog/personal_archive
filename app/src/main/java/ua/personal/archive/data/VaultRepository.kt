@@ -78,6 +78,12 @@ class VaultRepository(private val context: Context, cryptoFactory: () -> VaultCr
         docs to if (sections.any { it.id == section.id }) sections.map { if (it.id == section.id) section else it } else sections + section
     }
 
+    /** Новий порядок розділів (після перетягування плиток). */
+    suspend fun reorderSections(ids: List<String>): Unit = mutateAll { docs, sections ->
+        val byId = sections.associateBy { it.id }
+        docs to (ids.mapNotNull { byId[it] } + sections.filter { it.id !in ids })
+    }
+
     suspend fun moveSection(id: String, delta: Int): Unit = mutateAll { docs, sections ->
         val i = sections.indexOfFirst { it.id == id }
         val j = i + delta
