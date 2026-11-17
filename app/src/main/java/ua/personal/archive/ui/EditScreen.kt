@@ -3,6 +3,7 @@ package ua.personal.archive.ui
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.DocumentScanner
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material3.AlertDialog
@@ -122,6 +124,14 @@ fun EditScreen(docId: String?, initialCategory: String? = null, sharedUris: List
         } else f?.delete()
     }
 
+    // Сканер документів (Google ML Kit): сам знаходить аркуш, прибирає фон, вирівнює й покращує зображення.
+    val scanDoc = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
+        val pdf = DocScanner.resultPdf(res.resultCode, res.data) ?: return@rememberLauncherForActivityResult
+        val n = "Скан ${java.text.SimpleDateFormat("yyyy-MM-dd HH-mm-ss", java.util.Locale.ROOT).format(java.util.Date())}.pdf"
+        importUris(listOf(pdf), deleteAfter = DocScanner.localFile(pdf), name = n)
+    }
+    val activity = androidx.compose.ui.platform.LocalContext.current.findActivity()
+
     val dirty = title != original?.title.orEmpty() || added.isNotEmpty() || category != defaultSection ||
         number != original?.number.orEmpty() || note != original?.note.orEmpty() || expiresAt != original?.expiresAt ||
         attachments.size != (original?.attachments?.size ?: 0)
@@ -208,6 +218,27 @@ fun EditScreen(docId: String?, initialCategory: String? = null, sharedUris: List
             ) {
                 Icon(Icons.Outlined.UploadFile, null); Spacer(Modifier.width(8.dp))
                 Text("Додати файли (PDF, Word, Excel…)")
+            }
+            OutlinedButton(
+                onClick = {
+                    val act = activity
+                    if (act == null) error = "Сканер недоступний" else {
+                    busy = true
+                    DocScanner.start(act,
+                        onReady = { sender ->
+                            busy = false
+                            app.lock.expectingExternalActivity = true
+                            scanDoc.launch(IntentSenderRequest.Builder(sender).build())
+                        },
+                        onError = { msg -> busy = false; error = msg },
+                    )
+                    }
+                },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Outlined.DocumentScanner, null); Spacer(Modifier.width(8.dp))
+                Text("Сканувати документ")
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {

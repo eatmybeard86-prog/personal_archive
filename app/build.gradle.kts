@@ -82,6 +82,8 @@ dependencies {
     implementation("androidx.print:print:1.0.0")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
     implementation("net.lingala.zip4j:zip4j:2.11.5")
+    // Сканер документів: межі аркуша, обрізання фону, вирівнювання перспективи, фільтри.
+    implementation("com.google.android.gms:play-services-mlkit-document-scanner:16.0.0-beta1")
 
     implementation("com.google.crypto.tink:tink-android:1.15.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
