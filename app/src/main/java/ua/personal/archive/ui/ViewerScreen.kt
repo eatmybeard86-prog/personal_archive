@@ -106,7 +106,12 @@ fun ViewerScreen(docId: String, attachmentId: String, onBack: () -> Unit) {
             null
         }
     }
-    DisposableEffect(reader) { onDispose { reader?.close() } }
+    // Закриваємо саме той документ, для якого створено ефект. Якщо читати `reader` в onDispose,
+    // там уже буде новий документ — і щойно відкритий PDF закривався б одразу (вічне завантаження).
+    DisposableEffect(reader) {
+        val opened = reader
+        onDispose { opened?.close() }
+    }
 
     Scaffold(
         topBar = {
@@ -182,14 +187,17 @@ private fun Pages(doc: Document, theme: ReaderTheme) {
         ) { index ->
             val page = pages[index]
             // Рендер із запасом (2.5× ширини екрана), щоб текст лишався чітким при збільшенні.
+            var failed by remember(doc, index) { mutableStateOf(false) }
             val bmp by produceState<Bitmap?>(null, doc, index) {
                 value = withContext(renderDispatcher) {
                     runCatching { doc.renderPage(page, (widthPx * 2.5f).toInt().coerceAtMost(3000)) }.getOrNull()
                 }
+                if (value == null) failed = true
             }
             Box(Modifier.fillMaxSize().zoomable(zoomStates[index]), contentAlignment = Alignment.Center) {
                 val b = bmp
-                if (b == null) CircularProgressIndicator()
+                if (b == null && failed) Text("Не вдалося показати сторінку ${index + 1}", color = Color(theme.barText), modifier = Modifier.padding(24.dp))
+                else if (b == null) CircularProgressIndicator()
                 else Image(
                     b.asImageBitmap(), null,
                     Modifier.fillMaxWidth().aspectRatio(page.width.toFloat() / page.height).padding(4.dp),

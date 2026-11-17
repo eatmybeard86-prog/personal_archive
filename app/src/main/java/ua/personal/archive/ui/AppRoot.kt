@@ -36,6 +36,8 @@ private fun Unlocked(app: ArchiveApp) {
             app.repo.load()
         }
         val nav = rememberNavController()
+        // Повернення назад ніколи не знімає головний екран (інакше лишається чорний порожній екран).
+        val back: () -> Unit = { if (nav.previousBackStackEntry != null) nav.popBackStack() }
         val incoming by app.incoming.collectAsStateWithLifecycle()
         LaunchedEffect(incoming) {
             if (incoming.isNotEmpty()) nav.navigate("edit?id=&cat=&shared=1")
@@ -65,17 +67,17 @@ private fun Unlocked(app: ArchiveApp) {
                     docId = it.arguments?.getString("id").orEmpty().ifBlank { null },
                     initialCategory = it.arguments?.getString("cat")?.ifBlank { null },
                     onDone = { id ->
-                        nav.popBackStack()
+                        back()
                         if (id != null && nav.currentDestination?.route == "home") nav.navigate("doc/$id")
                     },
-                    onBack = { nav.popBackStack() },
+                    onBack = back,
                 )
             }
             composable("doc/{id}") {
                 val id = it.arguments?.getString("id").orEmpty()
                 DetailScreen(
                     docId = id,
-                    onBack = { nav.popBackStack() },
+                    onBack = back,
                     onEdit = { nav.navigate("edit?id=$id") },
                     onView = { attId -> nav.navigate("view/$id/${Uri.encode(attId)}") },
                 )
@@ -84,11 +86,11 @@ private fun Unlocked(app: ArchiveApp) {
                 ViewerScreen(
                     docId = it.arguments?.getString("doc").orEmpty(),
                     attachmentId = it.arguments?.getString("att").orEmpty(),
-                    onBack = { nav.popBackStack() },
+                    onBack = back,
                 )
             }
-            composable("backup") { BackupScreen(onBack = { nav.popBackStack() }) }
-            composable("sections") { SectionsScreen(onBack = { nav.popBackStack() }) }
+            composable("backup") { BackupScreen(onBack = back) }
+            composable("sections") { SectionsScreen(onBack = back) }
         }
     }
 }

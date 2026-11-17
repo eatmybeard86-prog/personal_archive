@@ -52,7 +52,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import ua.personal.archive.data.Attachment
 import ua.personal.archive.data.Document
 import ua.personal.archive.util.PdfConverter
@@ -189,7 +191,8 @@ fun DetailScreen(docId: String, onBack: () -> Unit, onEdit: () -> Unit, onView: 
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false
-                    scope.launch { app.repo.delete(doc.id); onBack() }
+                    // Назад повертає гілка «doc == null» вище; видалення файлів не скасовуємо, коли екран закривається.
+                    scope.launch { withContext(NonCancellable) { app.repo.delete(doc.id) } }
                 }) { Text("Видалити", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Скасувати") } },
