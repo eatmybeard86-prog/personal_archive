@@ -34,6 +34,8 @@ data class Section(
     val icon: String = "folder",
     val color: Long = 0xFF94A3B8,
     val hint: String = "",
+    /** Сімейний розділ: синхронізується з телефонами родини через Wi-Fi. */
+    val family: Boolean = false,
 )
 
 @Serializable

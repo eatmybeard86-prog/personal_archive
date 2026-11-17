@@ -59,6 +59,7 @@ fun MainScreen(
     onAccessLog: () -> Unit = {},
     onBundle: () -> Unit = {},
     onCopies: () -> Unit = {},
+    onFamily: () -> Unit = {},
 ) {
     var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
     var folderCategory by rememberSaveable { mutableStateOf<String?>(null) }
@@ -119,7 +120,7 @@ fun MainScreen(
                 )
                 Tab.FOLDERS -> FoldersTab(folderCategory, { folderCategory = it }, onOpen, onSections)
                 Tab.SECURITY -> SecurityTab(onBackup, onAccessLog)
-                Tab.MORE -> MoreTab(onBackup, onReceive = { receiving = true }, onBundle = onBundle, onCopies = onCopies)
+                Tab.MORE -> MoreTab(onBackup, onReceive = { receiving = true }, onBundle = onBundle, onCopies = onCopies, onFamily = onFamily)
             }
         }
     }

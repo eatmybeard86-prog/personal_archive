@@ -168,6 +168,11 @@ class VaultRepository(private val context: Context, cryptoFactory: () -> VaultCr
         }
     }
 
+    /** Зберігає документ як є (з його датами) — для синхронізації сімейного розділу. */
+    suspend fun saveExact(doc: Document) = mutate { list ->
+        if (list.any { it.id == doc.id }) list.map { if (it.id == doc.id) doc else it } else list + doc
+    }
+
     suspend fun delete(docId: String) {
         val doc = find(docId) ?: return
         mutate { list -> list.filterNot { it.id == docId } }

@@ -74,6 +74,7 @@ private fun Unlocked(app: ArchiveApp) {
                     onAccessLog = { nav.navigate("accesslog") },
                     onBundle = { nav.navigate("bundle") },
                     onCopies = { nav.navigate("copies") },
+                    onFamily = { nav.navigate("family") },
                 )
             }
             composable(
@@ -127,6 +128,7 @@ private fun Unlocked(app: ArchiveApp) {
             }
             composable("copies") { CopiesScreen(onBack = back, onOpen = { id -> nav.navigate("copyview/$id") }) }
             composable("copyview/{id}") { CopyViewerScreen(it.arguments?.getString("id").orEmpty(), onBack = back) }
+            composable("family") { FamilyScreen(onBack = back) }
             composable("bundle") { BundleScreen(onBack = back) }
             composable("accesslog") { AccessLogScreen(onBack = back) }
             composable("backup") { BackupScreen(onBack = back) }

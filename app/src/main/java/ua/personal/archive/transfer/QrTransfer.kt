@@ -60,6 +60,7 @@ object QrTransfer {
         val title: String, val number: String, val note: String, val expiresAt: Long?,
         val tags: List<String>, val section: String, val sectionTitle: String,
         val files: List<FileInfo>,
+        val id: String = "", val createdAt: Long = 0, val updatedAt: Long = 0,
     )
 
     @Serializable
@@ -114,12 +115,19 @@ object QrTransfer {
     /** Пише документ (заголовок + усі файли) у зашифрований потік блоків AES-256-GCM. */
     fun writeDoc(raw: OutputStream, key: ByteArray, repo: VaultRepository, doc: Document, sectionTitle: String, onProgress: (Float) -> Unit = {}) {
         val out = EncryptingOutput(raw, key)
+        val d = DataOutputStream(out)
+        writeDocBody(d, repo, doc, sectionTitle, onProgress)
+        d.flush()
+        out.finish()
+    }
+
+    fun writeDocBody(d: DataOutputStream, repo: VaultRepository, doc: Document, sectionTitle: String, onProgress: (Float) -> Unit = {}) {
         val header = Header(
             doc.title, doc.number, doc.note, doc.expiresAt, doc.tags, doc.sectionId, sectionTitle,
             doc.attachments.map { FileInfo(it.name, it.mime, it.size) },
+            id = doc.id, createdAt = doc.createdAt, updatedAt = doc.updatedAt,
         )
         val hb = json.encodeToString(Header.serializer(), header).encodeToByteArray()
-        val d = DataOutputStream(out)
         d.writeInt(hb.size); d.write(hb)
         val total = doc.attachments.sumOf { it.size }.coerceAtLeast(1)
         var sent = 0L
@@ -135,13 +143,13 @@ object QrTransfer {
                 }
             }
         }
-        d.flush()
-        out.finish()
     }
 
     /** Читає документ із зашифрованого потоку: заголовок, потім кожен файл через [onFile]. */
-    fun readDoc(raw: InputStream, key: ByteArray, onFile: (FileInfo, InputStream) -> Unit): Header {
-        val d = DataInputStream(DecryptingInput(raw, key))
+    fun readDoc(raw: InputStream, key: ByteArray, onFile: (FileInfo, InputStream) -> Unit): Header =
+        readDocBody(DataInputStream(DecryptingInput(raw, key)), onFile)
+
+    fun readDocBody(d: DataInputStream, onFile: (FileInfo, InputStream) -> Unit): Header {
         val len = d.readInt()
         require(len in 1..1_000_000) { "Неправильні дані" }
         val hb = ByteArray(len).also { d.readFully(it) }
@@ -227,7 +235,7 @@ object QrTransfer {
 
     // ── Потік блоків AES-256-GCM: [довжина][шифротекст]; номер блоку й ознака кінця входять в AAD ──
 
-    private fun nonce(counter: Long) = ByteArray(12).also { n -> for (i in 0 until 8) n[4 + i] = (counter ushr (8 * (7 - i))).toByte() }
+    internal fun nonce(counter: Long) = ByteArray(12).also { n -> for (i in 0 until 8) n[4 + i] = (counter ushr (8 * (7 - i))).toByte() }
     private fun aad(counter: Long, last: Boolean) = "mydocs-$counter-${if (last) 1 else 0}".encodeToByteArray()
 
     internal class EncryptingOutput(private val raw: OutputStream, key: ByteArray) : OutputStream() {
@@ -257,6 +265,8 @@ object QrTransfer {
         }
 
         fun finish() { frame(true); out.flush() }
+        /** Відправляє накопичене негайно (для обміну повідомленнями в обидва боки). */
+        fun flushFrame() { if (pos > 0) frame(false); out.flush() }
         override fun flush() {}
     }
 
