@@ -40,6 +40,12 @@ private fun Unlocked(app: ArchiveApp) {
             // Після розблокування прибираємо тимчасові розшифровані копії, якими вже поділилися.
             app.exporter.clearTemp()
             app.repo.load()
+            // Перевірка цілісності раз на тиждень, у фоні.
+            val prefs = app.getSharedPreferences("integrity", android.content.Context.MODE_PRIVATE)
+            if (System.currentTimeMillis() - prefs.getLong("last", 0) > 7 * 24 * 3600_000L) {
+                app.repo.verifyIntegrity()
+                prefs.edit().putLong("last", System.currentTimeMillis()).apply()
+            }
             app.ocr.indexMissing()
         }
         val nav = rememberNavController()
@@ -91,6 +97,7 @@ private fun Unlocked(app: ArchiveApp) {
                     onBack = back,
                     onEdit = { nav.navigate("edit?id=$id") },
                     onView = { attId -> nav.navigate("view/$id/${Uri.encode(attId)}") },
+                    onShow = { attId -> nav.navigate("show/$id/${Uri.encode(attId)}") },
                 )
             }
             composable("view/{doc}/{att}") {
@@ -98,6 +105,14 @@ private fun Unlocked(app: ArchiveApp) {
                     docId = it.arguments?.getString("doc").orEmpty(),
                     attachmentId = it.arguments?.getString("att").orEmpty(),
                     onBack = back,
+                )
+            }
+            composable("show/{doc}/{att}") {
+                ViewerScreen(
+                    docId = it.arguments?.getString("doc").orEmpty(),
+                    attachmentId = it.arguments?.getString("att").orEmpty(),
+                    onBack = back,
+                    show = true,
                 )
             }
             composable("accesslog") { AccessLogScreen(onBack = back) }

@@ -1,5 +1,6 @@
 package ua.personal.archive.ui
 
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.AssistChip
@@ -70,7 +71,7 @@ import ua.personal.archive.util.PdfConverter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DetailScreen(docId: String, onBack: () -> Unit, onEdit: () -> Unit, onView: (String) -> Unit) {
+fun DetailScreen(docId: String, onBack: () -> Unit, onEdit: () -> Unit, onView: (String) -> Unit, onShow: (String) -> Unit = {}) {
     val app = LocalApp.current
     val context = LocalContext.current
     val docs by app.repo.documents.collectAsStateWithLifecycle()
@@ -168,6 +169,15 @@ fun DetailScreen(docId: String, onBack: () -> Unit, onEdit: () -> Unit, onView: 
             }
 
             val pages = doc.attachments.filter { isPageFile(it) }
+            if (doc.attachments.isNotEmpty()) {
+                Button(
+                    onClick = { onShow(if (pages.isNotEmpty()) ALL_PAGES else doc.attachments.first().id) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = SafeGreen),
+                ) {
+                    Icon(Icons.Outlined.Visibility, null); Spacer(Modifier.width(8.dp)); Text("Показати (на весь екран)")
+                }
+            }
             if (pages.size > 1) {
                 Button(onClick = { onView(ALL_PAGES) }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.AutoStories, null); Spacer(Modifier.width(8.dp)); Text("Переглянути всі сторінки (${pages.size})")

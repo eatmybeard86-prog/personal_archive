@@ -82,6 +82,7 @@ fun HomeTab(
     val app = LocalApp.current
     val docs by app.repo.documents.collectAsStateWithLifecycle()
     val loadError by app.repo.loadError.collectAsStateWithLifecycle()
+    val damaged by app.repo.damaged.collectAsStateWithLifecycle()
     val recent = remember(docs) { docs.sortedByDescending { it.updatedAt }.take(6) }
     val favorites = remember(docs) { docs.filter { it.favorite }.sortedBy { it.title.lowercase() } }
     val expiring = remember(docs) { docs.count { it.expiresAt != null && daysLeft(it.expiresAt) <= 60 } }
@@ -124,9 +125,14 @@ fun HomeTab(
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // ── Статус захисту ───────────────────────────────
             StatusCard(
-                ok = loadError == null,
-                title = if (loadError == null) "Ваші документи захищено" else "Сховище недоступне",
-                subtitle = loadError ?: if (expiring > 0) "Спливає строк: $expiring" else "Шифрування увімкнено",
+                ok = loadError == null && damaged.isEmpty(),
+                title = when {
+                    loadError != null -> "Сховище недоступне"
+                    damaged.isNotEmpty() -> "Пошкоджено файлів: ${damaged.size}"
+                    else -> "Ваші документи захищено"
+                },
+                subtitle = loadError ?: if (damaged.isNotEmpty()) damaged.take(3).joinToString(", ") { "${it.first}: ${it.second}" } + " — відновіть із резервної копії"
+                else if (expiring > 0) "Спливає строк: $expiring" else "Шифрування увімкнено",
                 onClick = onSecurity,
             )
 

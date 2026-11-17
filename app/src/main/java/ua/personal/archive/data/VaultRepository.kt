@@ -135,6 +135,31 @@ class VaultRepository(private val context: Context, cryptoFactory: () -> VaultCr
         if (list.any { it.id == doc.id }) list.map { if (it.id == doc.id) updated else it } else list + updated
     }
 
+    private val _damaged = MutableStateFlow<List<Pair<String, String>>>(emptyList())
+    /** Пошкоджені файли після останньої перевірки: (назва документа, назва файлу). */
+    val damaged: StateFlow<List<Pair<String, String>>> = _damaged.asStateFlow()
+
+    /**
+     * Перевірка цілісності: кожен файл повністю розшифровується. AES-GCM виявляє будь-яку зміну
+     * чи пошкодження байтів, тож файл, який не розшифровується, — пошкоджений або зник.
+     */
+    suspend fun verifyIntegrity(onProgress: (Float) -> Unit = {}): List<Pair<String, String>> = withContext(Dispatchers.IO) {
+        val all = _documents.value.flatMap { d -> d.attachments.map { d to it } }
+        val bad = ArrayList<Pair<String, String>>()
+        val buf = ByteArray(64 * 1024)
+        all.forEachIndexed { i, (d, a) ->
+            val ok = blobFile(a.id).exists() && runCatching {
+                var n = 0L
+                openAttachment(a).use { s -> while (true) { val r = s.read(buf); if (r < 0) break; n += r } }
+                n == a.size || a.size == 0L
+            }.getOrDefault(false)
+            if (!ok) bad += d.title to a.name
+            onProgress((i + 1f) / all.size.coerceAtLeast(1))
+        }
+        _damaged.value = bad
+        bad
+    }
+
     /** Зберігає розпізнаний текст вкладення, не змінюючи дату редагування документа. */
     suspend fun setAttachmentText(docId: String, attachmentId: String, text: String) = mutate { list ->
         list.map { d ->

@@ -1,5 +1,7 @@
 package ua.personal.archive.ui
 
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.outlined.Close
 import android.graphics.Bitmap
 import android.graphics.Typeface
 import android.text.Layout
@@ -90,7 +92,7 @@ private val renderDispatcher = Dispatchers.IO.limitedParallelism(1)
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ViewerScreen(docId: String, attachmentId: String, onBack: () -> Unit) {
+fun ViewerScreen(docId: String, attachmentId: String, onBack: () -> Unit, show: Boolean = false) {
     val app = LocalApp.current
     val doc = remember(docId) { app.repo.find(docId) }
     // ALL_PAGES — усі фото й PDF документа однією стрічкою сторінок.
@@ -117,6 +119,29 @@ fun ViewerScreen(docId: String, attachmentId: String, onBack: () -> Unit) {
     DisposableEffect(reader) {
         val opened = reader
         onDispose { opened?.close() }
+    }
+
+    // Режим «Показати»: на весь екран, максимальна яскравість, екран закріплено.
+    // Вийти можна лише із блокуванням додатку — до решти сховища без пароля не дістатися.
+    if (show) {
+        ShowModeEffects { app.lock.lockNow() }
+        Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+            val r = reader
+            val day = ReaderTheme.byName("DAY")
+            when {
+                error != null -> Text(error.orEmpty(), color = Color.White, textAlign = TextAlign.Center, modifier = Modifier.padding(24.dp))
+                attachment == null -> Text("Файл не знайдено", color = Color.White)
+                r == null -> CircularProgressIndicator()
+                r.paged -> Pages(r, day)
+                else -> TextPages(r, day, textScale) { textScale = it }
+            }
+            IconButton(
+                onClick = { app.lock.lockNow() },
+                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(8.dp)
+                    .background(Color.Black.copy(alpha = 0.4f), androidx.compose.foundation.shape.CircleShape),
+            ) { Icon(Icons.Outlined.Close, "Завершити показ і заблокувати", tint = Color.White) }
+        }
+        return
     }
 
     Scaffold(
@@ -194,6 +219,34 @@ private suspend fun openAll(app: ArchiveApp, title: String, list: List<Attachmen
         parts.forEach { runCatching { it.close() } }
         root.deleteRecursively()
         throw e
+    }
+}
+
+@Composable
+private fun ShowModeEffects(onExit: () -> Unit) {
+    val activity = androidx.compose.ui.platform.LocalContext.current.findActivity()
+    androidx.activity.compose.BackHandler { onExit() }
+    DisposableEffect(activity) {
+        val w = activity?.window
+        val oldBrightness = w?.attributes?.screenBrightness
+        w?.let {
+            it.attributes = it.attributes.apply { screenBrightness = android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL }
+            it.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            androidx.core.view.WindowCompat.getInsetsController(it, it.decorView).apply {
+                hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        }
+        // Закріплення екрана: Android попросить підтвердження; кнопки «Додому» й «Недавні» не працюють.
+        runCatching { activity?.startLockTask() }
+        onDispose {
+            runCatching { activity?.stopLockTask() }
+            w?.let {
+                it.attributes = it.attributes.apply { screenBrightness = oldBrightness ?: android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE }
+                it.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                androidx.core.view.WindowCompat.getInsetsController(it, it.decorView).show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            }
+        }
     }
 }
 

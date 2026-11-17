@@ -1,5 +1,6 @@
 package ua.personal.archive.ui
 
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.ui.text.input.ImeAction
@@ -196,6 +197,27 @@ fun SecurityTab(onBackup: () -> Unit, onAccessLog: () -> Unit = {}) {
                 OutlinedButton(onClick = { lock.lockNow() }) {
                     Icon(Icons.Filled.Lock, null); Spacer(Modifier.width(8.dp)); Text("Заблокувати зараз")
                 }
+            }
+
+            Section("Перевірка цілісності") {
+                val scope = androidx.compose.runtime.rememberCoroutineScope()
+                var checking by remember { mutableStateOf<Float?>(null) }
+                Text(
+                    "Кожен файл повністю розшифровується й перевіряється. Якщо файл пошкоджено (збій пам'яті, втручання), ви побачите попередження. " +
+                        "Перевірка також іде автоматично раз на тиждень.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                checking?.let { androidx.compose.material3.LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }
+                OutlinedButton(enabled = checking == null, onClick = {
+                    checking = 0f
+                    scope.launch {
+                        val bad = app.repo.verifyIntegrity { checking = it }
+                        checking = null
+                        message = if (bad.isEmpty()) "Усі файли цілі ✓"
+                        else "Пошкоджено файлів: ${bad.size}\n\n" + bad.joinToString("\n") { "• ${it.first}: ${it.second}" } +
+                            "\n\nВідновіть ці документи з резервної копії."
+                    }
+                }) { Text("Перевірити зараз") }
             }
 
             Section("Журнал доступу") {
