@@ -126,6 +126,7 @@ fun SecurityTab(onBackup: () -> Unit, onAccessLog: () -> Unit = {}) {
     val method = if (decoy) fakeMethod ?: realMethod else realMethod
     var setPasswordFor by remember { mutableStateOf<LockMethod?>(null) }
     var duressDialog by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
     val intruder by app.settings.intruderPhoto.collectAsStateWithLifecycle()
     val askCamera = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
@@ -133,7 +134,6 @@ fun SecurityTab(onBackup: () -> Unit, onAccessLog: () -> Unit = {}) {
         app.settings.setIntruderPhoto(granted)
         if (!granted) message = "Без дозволу на камеру фото не робитимуться. Його можна дати в налаштуваннях Android."
     }
-    var message by remember { mutableStateOf<String?>(null) }
 
     fun choose(m: LockMethod) {
         when {
