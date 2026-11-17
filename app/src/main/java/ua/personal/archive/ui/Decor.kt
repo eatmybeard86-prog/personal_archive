@@ -12,6 +12,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.FolderZip
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -140,22 +148,6 @@ fun GhostShield(modifier: Modifier = Modifier) {
     }
 }
 
-data class FileStyle(val label: String, val color: Color)
-
-fun fileStyle(a: Attachment?): FileStyle {
-    if (a == null) return FileStyle("—", Color(0xFF64748B))
-    val ext = a.name.substringAfterLast('.', "").uppercase().take(4)
-    return when (PdfConverter.kindOf(a)) {
-        PdfConverter.Kind.PDF -> FileStyle("PDF", Color(0xFFE5322D))
-        PdfConverter.Kind.DOCX, PdfConverter.Kind.DOC, PdfConverter.Kind.RTF, PdfConverter.Kind.ODT -> FileStyle(ext.ifBlank { "DOC" }, Color(0xFF2B6FF3))
-        PdfConverter.Kind.XLSX -> FileStyle(ext.ifBlank { "XLSX" }, Color(0xFF1FA35B))
-        PdfConverter.Kind.PPTX -> FileStyle("PPTX", Color(0xFFE8710A))
-        PdfConverter.Kind.IMAGE -> FileStyle(ext.ifBlank { "IMG" }, Color(0xFF8B5CF6))
-        PdfConverter.Kind.TEXT, PdfConverter.Kind.HTML -> FileStyle(ext.ifBlank { "TXT" }, Color(0xFF64748B))
-        PdfConverter.Kind.OTHER -> FileStyle(ext.ifBlank { "FILE" }, Color(0xFF64748B))
-    }
-}
-
 /** Мініатюри зображень тримаємо лише в пам'яті (на диск не пишемо). */
 private val thumbCache = LruCache<String, Bitmap>(40)
 
@@ -172,19 +164,36 @@ fun FileBadge(a: Attachment?, size: Dp = 48.dp) {
             runCatching { PdfConverter.decodeBitmap(app.repo.readAttachment(a), maxSide = 256) }.getOrNull()
         }?.also { thumbCache.put(a.id, it) }
     }
-    val shape = RoundedCornerShape(10.dp)
     val t = thumb
     if (t != null) {
-        Image(t.asImageBitmap(), null, Modifier.size(size).clip(shape), contentScale = ContentScale.Crop)
+        Image(t.asImageBitmap(), null, Modifier.size(size).clip(RoundedCornerShape(size * 0.26f)), contentScale = ContentScale.Crop)
     } else {
-        val style = fileStyle(a)
-        Box(
-            Modifier.size(size * 0.82f, size).clip(shape)
-                .background(Brush.verticalGradient(listOf(style.color, style.color.copy(alpha = 0.8f))))
-                .border(1.dp, Color.White.copy(alpha = 0.15f), shape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(style.label, color = Color.White, fontWeight = FontWeight.Bold, fontSize = (size.value * 0.24f).sp, maxLines = 1)
+        val type = fileType(a)
+        StyledIcon(type.vector, type.color, size, label = type.label)
+    }
+}
+
+/** Значок типу файлу (з набору іконок): символ або літера та фірмовий колір. */
+data class FileType(val vector: ImageVector?, val label: String?, val color: Color)
+
+fun fileType(a: Attachment?): FileType {
+    if (a == null) return FileType(Icons.Filled.MoreHoriz, null, Color(0xFF22B8CF))
+    val ext = a.name.substringAfterLast('.', "").lowercase()
+    val mime = a.mime.lowercase()
+    return when {
+        ext in setOf("xls", "xlsx", "ods", "csv") -> FileType(null, "X", Color(0xFF1FA35B))
+        ext in setOf("ppt", "pptx", "odp") -> FileType(null, "P", Color(0xFFF97316))
+        ext in setOf("zip", "rar", "7z", "tar", "gz") -> FileType(Icons.Filled.FolderZip, null, Color(0xFF0EA5E9))
+        mime.startsWith("video/") || ext in setOf("mp4", "mov", "avi", "mkv", "3gp", "webm") -> FileType(Icons.Filled.PlayArrow, null, Color(0xFF6366F1))
+        mime.startsWith("audio/") || ext in setOf("mp3", "m4a", "wav", "ogg", "aac", "flac") -> FileType(Icons.Filled.MusicNote, null, Color(0xFFEC4899))
+        else -> when (PdfConverter.kindOf(a)) {
+            PdfConverter.Kind.PDF -> FileType(Icons.Filled.PictureAsPdf, null, Color(0xFFE5322D))
+            PdfConverter.Kind.DOCX, PdfConverter.Kind.DOC, PdfConverter.Kind.RTF, PdfConverter.Kind.ODT -> FileType(null, "W", Color(0xFF2B6FF3))
+            PdfConverter.Kind.XLSX -> FileType(null, "X", Color(0xFF1FA35B))
+            PdfConverter.Kind.PPTX -> FileType(null, "P", Color(0xFFF97316))
+            PdfConverter.Kind.IMAGE -> FileType(Icons.Filled.Image, null, Color(0xFF8B5CF6))
+            PdfConverter.Kind.TEXT, PdfConverter.Kind.HTML -> FileType(Icons.Filled.Description, null, Color(0xFF94A3B8))
+            PdfConverter.Kind.OTHER -> FileType(Icons.Filled.MoreHoriz, null, Color(0xFF22B8CF))
         }
     }
 }

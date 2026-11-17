@@ -223,10 +223,7 @@ private fun AttachmentRow(
 ) {
     var menu by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().clickable(onClick = onView).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            if (PdfConverter.kindOf(a) == PdfConverter.Kind.IMAGE) Icons.Outlined.Image else Icons.Outlined.Description, null,
-            tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp),
-        )
+        FileBadge(a, 40.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(a.name, maxLines = 2, overflow = TextOverflow.Ellipsis)

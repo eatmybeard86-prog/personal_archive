@@ -227,10 +227,7 @@ fun EditScreen(docId: String?, initialCategory: String? = null, sharedUris: List
             )
             attachments.forEach { a ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        if (PdfConverter.kindOf(a) == PdfConverter.Kind.IMAGE) Icons.Outlined.Image else Icons.Outlined.Description, null,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
+                    FileBadge(a, 36.dp)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(a.name, maxLines = 1, overflow = TextOverflow.Ellipsis)

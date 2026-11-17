@@ -101,9 +101,7 @@ fun SectionsScreen(onBack: () -> Unit) {
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
                 ) {
                     Row(Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(s.tint.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
-                            Icon(s.iconVector, null, tint = s.tint)
-                        }
+                        StyledIcon(s.iconVector, s.tint, 40.dp)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(s.title, maxLines = 1, overflow = TextOverflow.Ellipsis)

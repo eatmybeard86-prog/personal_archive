@@ -287,10 +287,7 @@ private fun CategoryTile(c: Section, count: Int, modifier: Modifier, onClick: ()
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Box(
-            Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(tint.copy(alpha = 0.16f)),
-            contentAlignment = Alignment.Center,
-        ) { Icon(c.iconVector, null, tint = tint, modifier = Modifier.size(28.dp)) }
+        StyledIcon(c.iconVector, tint, 50.dp)
         Spacer(Modifier.height(8.dp))
         Text(
             c.title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface,

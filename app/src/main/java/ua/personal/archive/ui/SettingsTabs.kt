@@ -25,6 +25,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
@@ -55,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ua.personal.archive.BuildConfig
 import ua.personal.archive.reader.ReaderTheme
+import ua.personal.archive.security.IconStyle
 import ua.personal.archive.security.LockMethod
 import ua.personal.archive.security.Palette
 import ua.personal.archive.security.ThemeMode
@@ -233,6 +237,32 @@ fun MoreTab(onBackup: () -> Unit) {
                         }
                         Spacer(Modifier.width(12.dp))
                         Text(p.title)
+                    }
+                }
+            }
+
+            Section("Стиль іконок") {
+                val iconStyle by app.settings.iconStyle.collectAsStateWithLifecycle()
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    IconStyle.entries.forEach { st ->
+                        val selected = st == iconStyle
+                        Column(
+                            Modifier.clip(RoundedCornerShape(14.dp))
+                                .border(
+                                    if (selected) 2.dp else 1.dp,
+                                    if (selected) MaterialTheme.colorScheme.primary else cardBorder(),
+                                    RoundedCornerShape(14.dp),
+                                )
+                                .clickable { app.settings.setIconStyle(st) }
+                                .padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            StyledIcon(Icons.Filled.Shield, Color(0xFF22C55E), 34.dp, style = st)
+                            StyledIcon(Icons.Filled.Folder, Color(0xFF3B82F6), 34.dp, style = st)
+                            StyledIcon(Icons.Filled.DirectionsCar, Color(0xFF38BDF8), 34.dp, style = st)
+                            Text(st.title, style = MaterialTheme.typography.labelMedium)
+                        }
                     }
                 }
             }

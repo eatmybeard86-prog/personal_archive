@@ -13,6 +13,12 @@ enum class LockMethod(val title: String, val hint: String) {
     PASSWORD_BIOMETRIC("Пароль додатку + біометрія", "Швидкий вхід відбитком, пароль — як запасний варіант"),
 }
 
+/** Стиль іконок (набори з макетів): змінює плитки розділів і значки файлів. */
+enum class IconStyle(val title: String) {
+    CLASSIC("Класична"), NEON("Неонова"), DARK("Темна"), LIGHT("Світла"),
+    COLORFUL("Кольорова"), GRADIENT("Градієнт"), METAL("Метал"), CAMO("Камуфляж"),
+}
+
 enum class Palette(val title: String) {
     NAVY("Темно-синя"),
     DYNAMIC("Кольори шпалер (Android 12+)"),
@@ -45,6 +51,11 @@ class SettingsStore(context: Context) {
     val readerTheme: StateFlow<String> = _readerTheme.asStateFlow()
 
     fun setReaderTheme(v: String) { prefs.edit().putString("reader_theme", v).apply(); _readerTheme.value = v }
+
+    private val _iconStyle = MutableStateFlow(enumOr(prefs.getString("icon_style", null), IconStyle.CLASSIC))
+    val iconStyle: StateFlow<IconStyle> = _iconStyle.asStateFlow()
+
+    fun setIconStyle(v: IconStyle) { prefs.edit().putString("icon_style", v.name).apply(); _iconStyle.value = v }
 
     fun setLockMethod(v: LockMethod) { prefs.edit().putString("lock_method", v.name).apply(); _lockMethod.value = v }
     fun setThemeMode(v: ThemeMode) { prefs.edit().putString("theme_mode", v.name).apply(); _themeMode.value = v }
