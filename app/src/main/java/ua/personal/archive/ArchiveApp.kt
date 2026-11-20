@@ -19,6 +19,8 @@ class ArchiveApp : Application() {
     lateinit var lock: AppLock
     val accessLog by lazy { ua.personal.archive.security.AccessLog(this) { VaultCrypto(this) } }
     val repo by lazy { VaultRepository(this) { VaultCrypto(this) } }
+    /** Розділ «Паролі»: окремий зашифрований файл і окремий ключ. */
+    val passwords by lazy { ua.personal.archive.data.PasswordVault(this) { ua.personal.archive.crypto.PasswordCrypto(this) } }
     val exporter by lazy { Exporter(this, repo) }
     /** Фонове розпізнавання тексту в сканах для пошуку. */
     val copies by lazy { ua.personal.archive.transfer.SecureCopy(this) { VaultCrypto(this) } }

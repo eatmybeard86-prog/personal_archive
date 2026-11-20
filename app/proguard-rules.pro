@@ -11,3 +11,7 @@
 -keep class com.google.crypto.tink.proto.** { *; }
 # zip4j
 -dontwarn net.lingala.zip4j.**
+# Bouncy Castle (Argon2id)
+-dontwarn org.bouncycastle.**
+# ML Kit
+-dontwarn com.google.mlkit.**
