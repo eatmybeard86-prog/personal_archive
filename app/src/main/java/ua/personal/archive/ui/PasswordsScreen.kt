@@ -96,6 +96,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import ua.personal.archive.data.PasswordCategory
 import ua.personal.archive.data.PasswordEntry
+import ua.personal.archive.data.PasswordGroup
 import ua.personal.archive.passwords.ScanFields
 import ua.personal.archive.passwords.ScanParser
 import java.text.SimpleDateFormat
@@ -120,6 +121,59 @@ val PasswordCategory.icon: ImageVector
     }
 
 val PasswordCategory.tint: Color get() = Color(color)
+
+/** Розділ для показу: вбудований або власний. [kind] — чиї поля й поведінку він використовує. */
+data class CatView(
+    val id: String,
+    val title: String,
+    val hint: String,
+    val tint: Color,
+    val icon: ImageVector,
+    val kind: PasswordCategory,
+    val custom: Boolean,
+)
+
+/** Іконки для власних розділів. */
+val GROUP_ICONS: List<Pair<String, ImageVector>> = listOf(
+    "key" to Icons.Filled.Key, "bank" to Icons.Filled.AccountBalance, "card" to Icons.Filled.CreditCard,
+    "gov" to Icons.Filled.Gavel, "home" to Icons.Filled.Home, "car" to Icons.Filled.DirectionsCar,
+    "school" to Icons.Filled.School, "medical" to Icons.Filled.MedicalServices, "flight" to Icons.Filled.Flight,
+    "shield" to Icons.Filled.Shield, "phone" to Icons.Filled.PhoneAndroid, "tv" to Icons.Filled.Tv,
+    "work" to Icons.Filled.Work, "cloud" to Icons.Filled.Cloud, "lock" to Icons.Filled.Lock,
+    "star" to Icons.Filled.Star, "heart" to Icons.Filled.Favorite, "pets" to Icons.Filled.Pets,
+    "shop" to Icons.Filled.ShoppingCart, "game" to Icons.Filled.SportsEsports, "folder" to Icons.Filled.Folder,
+)
+val GROUP_COLORS: List<Long> = listOf(0xFF60A5FA, 0xFF34D399, 0xFFFBBF24, 0xFFF87171, 0xFFA78BFA, 0xFFF472B6, 0xFF2DD4BF, 0xFFFB923C, 0xFF94A3B8)
+
+/** Шаблони полів для власного розділу. */
+private val GROUP_BASES = listOf(
+    PasswordCategory.OTHER to "Логін і пароль", PasswordCategory.WIFI to "Wi-Fi", PasswordCategory.NOTES to "Нотатка",
+    PasswordCategory.LICENSES to "Ліцензія", PasswordCategory.SERVERS to "Сервер", PasswordCategory.SUBSCRIPTIONS to "Підписка",
+    PasswordCategory.CONTACTS to "Контакт",
+)
+
+fun groupIcon(key: String): ImageVector = GROUP_ICONS.firstOrNull { it.first == key }?.second ?: Icons.Filled.Key
+
+fun PasswordCategory.view() = CatView(name, title, hint, tint, icon, this, custom = false)
+
+fun PasswordGroup.view(): CatView {
+    val kind = PasswordCategory.of(base)
+    val fields = GROUP_BASES.firstOrNull { it.first == kind }?.second ?: "Логін і пароль"
+    return CatView(id, title, "Власний розділ · поля: $fields", Color(color), groupIcon(icon), kind, custom = true)
+}
+
+/** Вбудовані розділи, далі власні, «Інше» — останнім. */
+fun catViews(groups: List<PasswordGroup>): List<CatView> =
+    PasswordCategory.entries.filter { it != PasswordCategory.OTHER }.map { it.view() } + groups.map { it.view() } + PasswordCategory.OTHER.view()
+
+/** Розділ за id; невідомий (наприклад, видалений) — «Інше». */
+fun List<CatView>.of(id: String?): CatView = firstOrNull { it.id == id } ?: PasswordCategory.OTHER.view()
+
+@Composable
+fun rememberCatViews(): List<CatView> {
+    val groups by LocalApp.current.passwords.groups.collectAsStateWithLifecycle()
+    return remember(groups) { catViews(groups) }
+}
 
 private fun dateTime(ms: Long) = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.ROOT).format(Date(ms))
 
@@ -274,9 +328,8 @@ private fun periodTitle(p: String) = if (p == "YEAR") "щороку" else "що�
 private fun priceValue(price: String): Double? =
     Regex("\\d[\\d\\s]*(?:[.,]\\d+)?").find(price)?.value?.replace(Regex("\\s"), "")?.replace(',', '.')?.toDoubleOrNull()
 
-private fun subtitleOf(e: PasswordEntry): String {
-    val c = PasswordCategory.of(e.category)
-    return when (c) {
+private fun subtitleOf(e: PasswordEntry, kind: PasswordCategory): String {
+    return when (kind) {
         PasswordCategory.SERVERS -> buildString {
             if (e.protocol.isNotBlank()) append(e.protocol.lowercase()).append(" ")
             if (e.login.isNotBlank()) append(e.login).append("@")
@@ -310,6 +363,10 @@ fun PasswordsScreen(onBack: () -> Unit, onOpen: (String) -> Unit, onAdd: (catego
     var query by rememberSaveable { mutableStateOf("") }
     var view by rememberSaveable { mutableStateOf<String?>(null) }
     var confirmEmpty by remember { mutableStateOf(false) }
+    var editGroup by remember { mutableStateOf<PasswordGroup?>(null) }
+    var deleteGroup by remember { mutableStateOf<PasswordGroup?>(null) }
+    val groups by app.passwords.groups.collectAsStateWithLifecycle()
+    val cats = remember(groups) { catViews(groups) }
     LaunchedEffect(Unit) { app.passwords.load(); app.passwords.purgeTrash() }
 
     val active = remember(entries) { entries.filter { it.deletedAt == null && !it.archived } }
@@ -320,7 +377,7 @@ fun PasswordsScreen(onBack: () -> Unit, onOpen: (String) -> Unit, onAdd: (catego
             VIEW_FAVORITES -> active.filter { it.favorite }
             VIEW_ARCHIVE -> entries.filter { it.deletedAt == null && it.archived }
             VIEW_TRASH -> entries.filter { it.deletedAt != null }
-            else -> active.filter { it.category == view }
+            else -> active.filter { cats.of(it.category).id == view }
         }
         base.filter { e ->
             q.isEmpty() || listOf(e.title, e.login, e.site, e.note, e.phone).any { it.lowercase().contains(q) }
@@ -329,7 +386,8 @@ fun PasswordsScreen(onBack: () -> Unit, onOpen: (String) -> Unit, onAdd: (catego
             else compareByDescending<PasswordEntry> { it.favorite }.thenBy { it.title.lowercase() },
         )
     }
-    val addCategory = PasswordCategory.entries.firstOrNull { it.name == view }?.name
+    val addCategory = cats.firstOrNull { it.id == view }?.id
+    val viewCat = cats.firstOrNull { it.id == view }
 
     Scaffold(
         topBar = {
@@ -369,14 +427,19 @@ fun PasswordsScreen(onBack: () -> Unit, onOpen: (String) -> Unit, onAdd: (catego
                         selected = view == VIEW_FAVORITES, onClick = { view = if (view == VIEW_FAVORITES) null else VIEW_FAVORITES },
                         label = { Text("Обране") }, leadingIcon = { Icon(Icons.Filled.Star, null, Modifier.size(18.dp), tint = Color(0xFFFBBF24)) },
                     )
-                    PasswordCategory.entries.forEach { c ->
-                        val n = active.count { it.category == c.name }
+                    cats.forEach { c ->
+                        val n = active.count { cats.of(it.category).id == c.id }
                         FilterChip(
-                            selected = view == c.name, onClick = { view = if (view == c.name) null else c.name },
+                            selected = view == c.id, onClick = { view = if (view == c.id) null else c.id },
                             label = { Text(if (n > 0) "${c.title} ($n)" else c.title) },
                             leadingIcon = { Icon(c.icon, null, Modifier.size(18.dp), tint = c.tint) },
                         )
                     }
+                    // Власний розділ для конкретного типу паролів («Банки», «Держпослуги»…).
+                    FilterChip(
+                        selected = false, onClick = { editGroup = PasswordGroup(title = "") },
+                        label = { Text("Свій розділ") }, leadingIcon = { Icon(Icons.Filled.Add, null, Modifier.size(18.dp)) },
+                    )
                     FilterChip(
                         selected = view == VIEW_ARCHIVE, onClick = { view = if (view == VIEW_ARCHIVE) null else VIEW_ARCHIVE },
                         label = { Text("Архів") }, leadingIcon = { Icon(Icons.Outlined.Archive, null, Modifier.size(18.dp)) },
@@ -388,10 +451,19 @@ fun PasswordsScreen(onBack: () -> Unit, onOpen: (String) -> Unit, onAdd: (catego
                 }
             }
             error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
-            PasswordCategory.entries.firstOrNull { it.name == view }?.let { c ->
-                item { Text(c.hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            viewCat?.let { c ->
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(c.hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                        val g = groups.firstOrNull { it.id == c.id }
+                        if (g != null) {
+                            IconButton(onClick = { editGroup = g }) { Icon(Icons.Outlined.Edit, "Змінити розділ") }
+                            IconButton(onClick = { deleteGroup = g }) { Icon(Icons.Outlined.Delete, "Видалити розділ") }
+                        }
+                    }
+                }
             }
-            if (view == PasswordCategory.SUBSCRIPTIONS.name && shown.isNotEmpty()) item {
+            if (viewCat?.kind == PasswordCategory.SUBSCRIPTIONS && shown.isNotEmpty()) item {
                 val monthly = shown.sumOf { e -> (priceValue(e.price) ?: 0.0) / if (e.period == "YEAR") 12 else 1 }
                 Text(
                     "Разом ≈ ${"%.2f".format(Locale.ROOT, monthly)} на місяць (${"%.2f".format(Locale.ROOT, monthly * 12)} на рік)",
@@ -424,21 +496,37 @@ fun PasswordsScreen(onBack: () -> Unit, onOpen: (String) -> Unit, onAdd: (catego
                 )
             }
             if (view == null && query.isBlank()) {
-                PasswordCategory.entries.forEach { c ->
-                    val list = shown.filter { it.category == c.name }
+                cats.forEach { c ->
+                    val list = shown.filter { cats.of(it.category).id == c.id }
                     if (list.isNotEmpty()) {
-                        item(key = "h-" + c.name) {
-                            Row(Modifier.padding(top = 8.dp).clickable { view = c.name }, verticalAlignment = Alignment.CenterVertically) {
+                        item(key = "h-" + c.id) {
+                            Row(Modifier.padding(top = 8.dp).clickable { view = c.id }, verticalAlignment = Alignment.CenterVertically) {
                                 Icon(c.icon, null, tint = c.tint, modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text("${c.title} · ${list.size}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             }
                         }
-                        items(list, key = { it.id }) { e -> PasswordRow(e, ctx) { onOpen(e.id) } }
+                        items(list, key = { it.id }) { e -> PasswordRow(e, cats.of(e.category), ctx) { onOpen(e.id) } }
                     }
                 }
-            } else items(shown, key = { it.id }) { e -> PasswordRow(e, ctx) { onOpen(e.id) } }
+            } else items(shown, key = { it.id }) { e -> PasswordRow(e, cats.of(e.category), ctx) { onOpen(e.id) } }
         }
+    }
+    editGroup?.let { g ->
+        GroupDialog(g, onDismiss = { editGroup = null }, onSaved = { saved -> editGroup = null; view = saved.id })
+    }
+    deleteGroup?.let { g ->
+        val target = PasswordCategory.of(g.base)
+        val n = entries.count { it.category == g.id }
+        AlertDialog(
+            onDismissRequest = { deleteGroup = null },
+            title = { Text("Видалити розділ «${g.title}»?") },
+            text = { Text(if (n > 0) "Записи з нього ($n) не зникнуть — вони перейдуть у «${target.title}»." else "Розділ порожній.") },
+            confirmButton = {
+                TextButton(onClick = { deleteGroup = null; view = null; scope.launch { app.passwords.deleteGroup(g.id) } }) { Text("Видалити") }
+            },
+            dismissButton = { TextButton(onClick = { deleteGroup = null }) { Text("Скасувати") } },
+        )
     }
     if (confirmEmpty) AlertDialog(
         onDismissRequest = { confirmEmpty = false },
@@ -450,9 +538,8 @@ fun PasswordsScreen(onBack: () -> Unit, onOpen: (String) -> Unit, onAdd: (catego
 }
 
 @Composable
-private fun PasswordRow(e: PasswordEntry, ctx: Context, onClick: () -> Unit) {
-    val c = PasswordCategory.of(e.category)
-    val form = formFor(c)
+private fun PasswordRow(e: PasswordEntry, c: CatView, ctx: Context, onClick: () -> Unit) {
+    val form = formFor(c.kind)
     val dueSoon = e.nextPayment != null && daysLeft(e.nextPayment) in 0..3
     Card(
         Modifier.fillMaxWidth().clickable(onClick = onClick),
@@ -469,7 +556,7 @@ private fun PasswordRow(e: PasswordEntry, ctx: Context, onClick: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text((if (e.favorite) "★ " else "") + e.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    subtitleOf(e), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    subtitleOf(e, c.kind), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     color = if (dueSoon) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -498,9 +585,10 @@ fun PasswordDetailScreen(id: String, onBack: () -> Unit, onEdit: () -> Unit) {
     LaunchedEffect(Unit) { app.passwords.load() }
     val e = entries.firstOrNull { it.id == id }
     LaunchedEffect(loaded, e) { if (loaded && e == null) onBack() }
+    val cats = rememberCatViews()
     if (e == null) return
-    val c = PasswordCategory.of(e.category)
-    val form = formFor(c)
+    val c = cats.of(e.category)
+    val form = formFor(c.kind)
     val inTrash = e.deletedAt != null
     var show by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -589,7 +677,7 @@ fun PasswordDetailScreen(id: String, onBack: () -> Unit, onEdit: () -> Unit) {
                 InfoRow("Наступна оплата", e.nextPayment?.let { formatDate(it) + if (daysLeft(it) in 0..3) " (скоро!)" else "" } ?: "—") {}
             }
             if (e.note.isNotEmpty()) InfoRow(form.noteLabel, e.note) {
-                if (c == PasswordCategory.NOTES) IconButton(onClick = { copyToClipboard(ctx, "Нотатку", e.note, secret = true) }) { Icon(Icons.Outlined.ContentCopy, "Копіювати") }
+                if (c.kind == PasswordCategory.NOTES) IconButton(onClick = { copyToClipboard(ctx, "Нотатку", e.note, secret = true) }) { Icon(Icons.Outlined.ContentCopy, "Копіювати") }
             }
             HorizontalDivider()
             Text("Створено: ${dateTime(e.createdAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -649,7 +737,7 @@ fun PasswordEditScreen(id: String?, initialCategory: String?, autoScan: Boolean,
     val scope = rememberCoroutineScope()
     val original = remember { id?.let { app.passwords.find(it) } }
     var title by rememberSaveable { mutableStateOf(original?.title.orEmpty()) }
-    var category by rememberSaveable { mutableStateOf(original?.category ?: PasswordCategory.of(initialCategory).name) }
+    var category by rememberSaveable { mutableStateOf(original?.category ?: initialCategory ?: PasswordCategory.OTHER.name) }
     var login by rememberSaveable { mutableStateOf(original?.login.orEmpty()) }
     var password by rememberSaveable { mutableStateOf(original?.password.orEmpty()) }
     var site by rememberSaveable { mutableStateOf(original?.site.orEmpty()) }
@@ -668,7 +756,9 @@ fun PasswordEditScreen(id: String?, initialCategory: String?, autoScan: Boolean,
     var confirmExit by remember { mutableStateOf(false) }
     // Категорію підбираємо самі, поки користувач не вибрав її вручну.
     var categoryTouched by rememberSaveable { mutableStateOf(original != null || initialCategory != null) }
-    val form = formFor(PasswordCategory.of(category))
+    val cats = rememberCatViews()
+    val kind = cats.of(category).kind
+    val form = formFor(kind)
     val dirty = original?.let {
         it.title != title || it.login != login || it.password != password || it.site != site || it.note != note || it.category != category ||
             it.port != port || it.protocol != protocol || it.price != price || it.nextPayment != nextPayment || it.phone != phone
@@ -738,9 +828,9 @@ fun PasswordEditScreen(id: String?, initialCategory: String?, autoScan: Boolean,
             )
             Text("Категорія", style = MaterialTheme.typography.titleSmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PasswordCategory.entries.forEach { c ->
+                cats.forEach { c ->
                     FilterChip(
-                        selected = category == c.name, onClick = { category = c.name; categoryTouched = true },
+                        selected = cats.of(category).id == c.id, onClick = { category = c.id; categoryTouched = true },
                         label = { Text(c.title) }, leadingIcon = { Icon(c.icon, null, Modifier.size(18.dp), tint = c.tint) },
                     )
                 }
@@ -764,7 +854,7 @@ fun PasswordEditScreen(id: String?, initialCategory: String?, autoScan: Boolean,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
                 trailingIcon = {
                     Row {
-                        if (category != PasswordCategory.LICENSES.name && category != PasswordCategory.NOTES.name) {
+                        if (kind != PasswordCategory.LICENSES && kind != PasswordCategory.NOTES) {
                             IconButton(onClick = { password = ScanParser.generate(); show = true }) { Icon(Icons.Outlined.AutoAwesome, "Згенерувати надійний пароль") }
                         }
                         IconButton(onClick = { show = !show }) {
@@ -811,7 +901,7 @@ fun PasswordEditScreen(id: String?, initialCategory: String?, autoScan: Boolean,
                     if (nextPayment != null) IconButton(onClick = { nextPayment = null }) { Icon(Icons.Outlined.Close, "Прибрати дату") }
                 }
             }
-            OutlinedTextField(note, { note = it }, label = { Text(form.noteLabel) }, minLines = if (category == PasswordCategory.NOTES.name) 6 else 3, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(note, { note = it }, label = { Text(form.noteLabel) }, minLines = if (kind == PasswordCategory.NOTES) 6 else 3, modifier = Modifier.fillMaxWidth())
             if (original != null) Text(
                 "Створено: ${dateTime(original.createdAt)} · Змінено: ${dateTime(original.updatedAt)}",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -841,4 +931,78 @@ fun PasswordEditScreen(id: String?, initialCategory: String?, autoScan: Boolean,
     error?.let {
         AlertDialog(onDismissRequest = { error = null }, text = { Text(it) }, confirmButton = { TextButton(onClick = { error = null }) { Text("OK") } })
     }
+}
+
+// ─────────────────────────────── власний розділ ───────────────────────────────
+
+/** Створення або зміна власного розділу: назва, які поля, іконка й колір. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun GroupDialog(initial: PasswordGroup, onDismiss: () -> Unit, onSaved: (PasswordGroup) -> Unit) {
+    val app = LocalApp.current
+    val scope = rememberCoroutineScope()
+    val isNew = app.passwords.groups.value.none { it.id == initial.id }
+    var title by remember { mutableStateOf(initial.title) }
+    var base by remember { mutableStateOf(PasswordCategory.of(initial.base)) }
+    var icon by remember { mutableStateOf(initial.icon) }
+    var color by remember { mutableStateOf(initial.color) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (isNew) "Новий розділ" else "Змінити розділ") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    title, { title = it; error = null }, label = { Text("Назва розділу") }, singleLine = true,
+                    placeholder = { Text("Банки, Держпослуги, Діти…") }, isError = error != null,
+                    supportingText = if (error != null) { { Text(error.orEmpty()) } } else null, modifier = Modifier.fillMaxWidth(),
+                )
+                Text("Які поля потрібні", style = MaterialTheme.typography.titleSmall)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    GROUP_BASES.forEach { (c, label) ->
+                        FilterChip(selected = base == c, onClick = { base = c }, label = { Text(label) })
+                    }
+                }
+                Text("Іконка", style = MaterialTheme.typography.titleSmall)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    GROUP_ICONS.forEach { (key, vector) ->
+                        val selected = icon == key
+                        Box(
+                            Modifier.size(40.dp).clip(RoundedCornerShape(10.dp))
+                                .background(if (selected) Color(color).copy(alpha = 0.25f) else Color.Transparent)
+                                .border(if (selected) 2.dp else 1.dp, if (selected) Color(color) else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                                .clickable { icon = key },
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(vector, null, tint = Color(color)) }
+                    }
+                }
+                Text("Колір", style = MaterialTheme.typography.titleSmall)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    GROUP_COLORS.forEach { c ->
+                        Box(
+                            Modifier.size(32.dp).clip(CircleShape).background(Color(c))
+                                .border(if (color == c) 3.dp else 0.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                                .clickable { color = c },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val t = title.trim()
+                val taken = catViews(app.passwords.groups.value).any { it.id != initial.id && it.title.equals(t, ignoreCase = true) }
+                when {
+                    t.isEmpty() -> error = "Вкажіть назву"
+                    taken -> error = "Розділ з такою назвою вже є"
+                    else -> {
+                        val g = initial.copy(title = t, base = base.name, icon = icon, color = color)
+                        scope.launch { app.passwords.saveGroup(g); onSaved(g) }
+                    }
+                }
+            }) { Text(if (isNew) "Створити" else "Зберегти") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Скасувати") } },
+    )
 }

@@ -39,12 +39,33 @@ enum class PasswordCategory(val title: String, val hint: String, val color: Long
     }
 }
 
+/**
+ * Власний розділ користувача («Банки», «Держпослуги»…). [base] — вбудована категорія,
+ * чиї поля використовуються (звичайний пароль, Wi-Fi, сервер, підписка тощо).
+ */
+@Serializable
+data class PasswordGroup(
+    val id: String = "g-" + UUID.randomUUID().toString(),
+    val title: String,
+    val icon: String = "key",
+    val color: Long = 0xFF60A5FA,
+    val base: String = PasswordCategory.OTHER.name,
+    val createdAt: Long = System.currentTimeMillis(),
+)
+
+/** Вміст файлу паролів. Старі версії зберігали просто список записів — його теж читаємо. */
+@Serializable
+private data class PasswordStoreFile(
+    val entries: List<PasswordEntry> = emptyList(),
+    val groups: List<PasswordGroup> = emptyList(),
+)
+
 /** Запис у розділі «Паролі». */
 @Serializable
 data class PasswordEntry(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
-    /** Назва з [PasswordCategory]. */
+    /** Назва з [PasswordCategory] або id власного розділу ([PasswordGroup.id]). */
     val category: String = PasswordCategory.OTHER.name,
     /** Сайт; для сервера — адреса / IP; для контакту — поштова адреса. */
     val site: String = "",
@@ -82,7 +103,7 @@ class PasswordVault(private val context: Context, cryptoFactory: () -> PasswordC
     private val crypto by lazy(cryptoFactory)
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val mutex = Mutex()
-    private val serializer = ListSerializer(PasswordEntry.serializer())
+    private val listSerializer = ListSerializer(PasswordEntry.serializer())
 
     @Volatile private var root = File(context.filesDir, "vault")
     @Volatile private var decoyMode = false
@@ -90,6 +111,10 @@ class PasswordVault(private val context: Context, cryptoFactory: () -> PasswordC
 
     private val _entries = MutableStateFlow<List<PasswordEntry>>(emptyList())
     val entries: StateFlow<List<PasswordEntry>> = _entries.asStateFlow()
+
+    private val _groups = MutableStateFlow<List<PasswordGroup>>(emptyList())
+    /** Власні розділи користувача. */
+    val groups: StateFlow<List<PasswordGroup>> = _groups.asStateFlow()
 
     private val _loaded = MutableStateFlow(false)
     val loaded: StateFlow<Boolean> = _loaded.asStateFlow()
@@ -115,6 +140,7 @@ class PasswordVault(private val context: Context, cryptoFactory: () -> PasswordC
     fun unload() {
         _unlocked.value = false
         _entries.value = emptyList()
+        _groups.value = emptyList()
         _loaded.value = false
         _error.value = null
     }
@@ -124,7 +150,13 @@ class PasswordVault(private val context: Context, cryptoFactory: () -> PasswordC
             if (_loaded.value) return@withLock
             try {
                 val f = file
-                _entries.value = if (f.exists()) json.decodeFromString(serializer, crypto.open(f.readBytes(), LABEL).decodeToString()) else emptyList()
+                val store = if (!f.exists()) PasswordStoreFile() else {
+                    val text = crypto.open(f.readBytes(), LABEL).decodeToString()
+                    if (text.trimStart().startsWith("[")) PasswordStoreFile(entries = json.decodeFromString(listSerializer, text))
+                    else json.decodeFromString(PasswordStoreFile.serializer(), text)
+                }
+                _entries.value = store.entries
+                _groups.value = store.groups
                 _loaded.value = true
                 _error.value = null
                 purgeNeeded = _entries.value.any { it.expired() }
@@ -157,33 +189,49 @@ class PasswordVault(private val context: Context, cryptoFactory: () -> PasswordC
     /** Видалити назавжди. */
     suspend fun delete(id: String) = mutate { list -> list.filterNot { it.id == id } }
 
+    /** Новий або змінений власний розділ. */
+    suspend fun saveGroup(group: PasswordGroup) = mutateAll { list, groups ->
+        list to if (groups.any { it.id == group.id }) groups.map { if (it.id == group.id) group else it } else groups + group
+    }
+
+    /** Видаляє власний розділ; його записи переносяться в [moveTo] (за замовчуванням — у вбудовану категорію, на якій розділ базувався). */
+    suspend fun deleteGroup(id: String, moveTo: String? = null) = mutateAll { list, groups ->
+        val target = moveTo ?: groups.firstOrNull { it.id == id }?.base ?: PasswordCategory.OTHER.name
+        list.map { if (it.category == id) it.copy(category = target) else it } to groups.filterNot { it.id == id }
+    }
+
     /** Додає записи з резервної копії; ті, що вже є (той самий id), пропускаються. Повертає кількість доданих. */
-    suspend fun merge(incoming: List<PasswordEntry>): Int {
+    suspend fun merge(incoming: List<PasswordEntry>, incomingGroups: List<PasswordGroup> = emptyList()): Int {
         var added = 0
-        mutate { list ->
+        mutateAll { list, groups ->
+            val knownGroups = groups.map { it.id }.toSet()
+            val nextGroups = groups + incomingGroups.filter { it.id !in knownGroups }
             val known = list.map { it.id }.toSet()
             val fresh = incoming.filter { it.id !in known }
             added = fresh.size
-            list + fresh
+            (list + fresh) to nextGroups
         }
         return added
     }
 
-    private suspend fun mutate(change: (List<PasswordEntry>) -> List<PasswordEntry>) = withContext(Dispatchers.IO) {
+    private suspend fun mutate(change: (List<PasswordEntry>) -> List<PasswordEntry>) = mutateAll { list, groups -> change(list) to groups }
+
+    private suspend fun mutateAll(change: (List<PasswordEntry>, List<PasswordGroup>) -> Pair<List<PasswordEntry>, List<PasswordGroup>>) = withContext(Dispatchers.IO) {
         load()
         mutex.withLock {
             check(_loaded.value) { _error.value ?: "Паролі недоступні" }
             val dir = root
-            val next = change(_entries.value)
+            val (next, nextGroups) = change(_entries.value, _groups.value)
             dir.mkdirs()
             val tmp = File(dir, "passwords.tmp")
-            tmp.writeBytes(crypto.seal(json.encodeToString(serializer, next).encodeToByteArray(), LABEL))
+            val plain = json.encodeToString(PasswordStoreFile.serializer(), PasswordStoreFile(next, nextGroups))
+            tmp.writeBytes(crypto.seal(plain.encodeToByteArray(), LABEL))
             val target = File(dir, "passwords.bin")
             if (!tmp.renameTo(target)) {
                 target.delete()
                 check(tmp.renameTo(target)) { "Не вдалося зберегти паролі" }
             }
-            if (dir === root) _entries.value = next
+            if (dir === root) { _entries.value = next; _groups.value = nextGroups }
         }
     }
 

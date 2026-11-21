@@ -63,6 +63,8 @@ class BackupManager(
         val paths: Map<String, String>,
         /** Записи розділу «Паролі» (лише в повній копії). */
         val passwords: List<PasswordEntry> = emptyList(),
+        /** Власні розділи паролів. */
+        val passwordGroups: List<PasswordGroup> = emptyList(),
     )
 
     data class ImportResult(val imported: Int, val skipped: Int, val files: Int, val passwords: Int = 0)
@@ -108,6 +110,7 @@ class BackupManager(
         val pw = if (categories == null && passwords != null) { passwords.load(); passwords.entries.value } else emptyList()
         val manifest = Manifest(
             passwords = pw,
+            passwordGroups = if (pw.isNotEmpty()) passwords?.groups?.value.orEmpty() else emptyList(),
             createdAt = System.currentTimeMillis(),
             documents = docs.map { it.copy(section = it.sectionId) },
             sections = docs.map { it.sectionId }.distinct().map { repo.section(it) },
@@ -134,7 +137,7 @@ class BackupManager(
             if (pw.isNotEmpty()) {
                 // Читабельний список — на випадок, якщо додатку під рукою немає (архів однаково зашифрований паролем копії).
                 inner.putNextEntry(ZipEntry("Паролі.txt"))
-                inner.write(passwordsText(pw).toByteArray())
+                inner.write(passwordsText(pw, passwords?.groups?.value.orEmpty()).toByteArray())
                 inner.closeEntry()
             }
             inner.putNextEntry(ZipEntry(MANIFEST))
@@ -218,7 +221,7 @@ class BackupManager(
                 files += atts.size
                 repo.save(d.copy(attachments = atts))
             }
-            val pw = if (manifest.passwords.isNotEmpty() && passwords != null) passwords.merge(manifest.passwords) else 0
+            val pw = if (manifest.passwords.isNotEmpty() && passwords != null) passwords.merge(manifest.passwords, manifest.passwordGroups) else 0
             ImportResult(imported = wanted.size, skipped = skipped, files = files, passwords = pw)
         } catch (e: Exception) {
             repo.discardAttachments(newAttachments.values.toList())
@@ -277,12 +280,13 @@ class BackupManager(
         }
     }
 
-    private fun passwordsText(list: List<PasswordEntry>): String = buildString {
+    private fun passwordsText(list: List<PasswordEntry>, groups: List<PasswordGroup>): String = buildString {
         val fmt = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT)
         appendLine("Паролі — «Мої документи», ${fmt.format(Date())}")
         appendLine()
-        list.filter { it.deletedAt == null }.groupBy { PasswordCategory.of(it.category) }.toSortedMap().forEach { (c, items) ->
-            appendLine("== ${c.title} ==")
+        val titles = PasswordCategory.entries.associate { it.name to it.title } + groups.associate { it.id to it.title }
+        list.filter { it.deletedAt == null }.groupBy { titles[it.category] ?: PasswordCategory.OTHER.title }.toSortedMap().forEach { (title, items) ->
+            appendLine("== $title ==")
             items.sortedBy { it.title.lowercase() }.forEach { e ->
                 appendLine("• ${e.title}" + if (e.archived) " (архів)" else "")
                 if (e.login.isNotBlank()) appendLine("  Логін: ${e.login}")
