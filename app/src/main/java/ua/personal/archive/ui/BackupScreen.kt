@@ -51,7 +51,7 @@ import ua.personal.archive.data.BackupManager
 @Composable
 fun BackupScreen(onBack: () -> Unit) {
     val app = LocalApp.current
-    val backup = remember { BackupManager(app, app.repo) }
+    val backup = remember { BackupManager(app, app.repo, app.passwords) }
     val docs by app.repo.documents.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
@@ -243,6 +243,7 @@ fun BackupScreen(onBack: () -> Unit) {
                         message = try {
                             val r = backup.restore(uri, pwd, cats) { progress = it }
                             "Відновлено документів: ${r.imported} (файлів: ${r.files})." +
+                                (if (r.passwords > 0) "\nВідновлено паролів: ${r.passwords}." else "") +
                                 if (r.skipped > 0) "\nПропущено (вже є в додатку): ${r.skipped}." else ""
                         } catch (e: Exception) {
                             "Не вдалося відновити: ${e.message}"

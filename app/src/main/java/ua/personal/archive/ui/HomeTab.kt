@@ -47,6 +47,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
@@ -78,6 +79,7 @@ fun HomeTab(
     onAll: () -> Unit,
     onSecurity: () -> Unit,
     onSettings: () -> Unit,
+    onPasswords: () -> Unit = {},
 ) {
     val app = LocalApp.current
     val docs by app.repo.documents.collectAsStateWithLifecycle()
@@ -135,6 +137,9 @@ fun HomeTab(
                 else if (expiring > 0) "Спливає строк: $expiring" else "Шифрування увімкнено",
                 onClick = onSecurity,
             )
+
+            // ── Паролі ───────────────────────────────────────
+            PasswordsCard(onPasswords)
 
             // ── Обране ───────────────────────────────────────
             if (favorites.isNotEmpty()) {
@@ -323,5 +328,31 @@ private fun AddSectionTile(modifier: Modifier, onClick: () -> Unit) {
         Icon(Icons.Filled.Add, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
         Spacer(Modifier.height(6.dp))
         Text("Новий розділ", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, maxLines = 2, textAlign = TextAlign.Center)
+    }
+}
+
+/** Вхід у розділ «Паролі» (кількість записів не показуємо — список розшифровується лише після перевірки обличчям). */
+@Composable
+private fun PasswordsCard(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(20.dp)
+    val accent = MaterialTheme.colorScheme.primary
+    Row(
+        Modifier.fillMaxWidth().clip(shape)
+            .background(Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.surfaceContainer)))
+            .border(1.dp, cardBorder(), shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        StyledIcon(androidx.compose.material.icons.Icons.Filled.Key, accent, 40.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Паролі", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Логіни, Wi-Fi, ліцензії, сервери, підписки. Можна сканувати камерою",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

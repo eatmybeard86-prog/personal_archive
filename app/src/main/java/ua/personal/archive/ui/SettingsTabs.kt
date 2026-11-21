@@ -223,6 +223,22 @@ fun SecurityTab(onBackup: () -> Unit, onAccessLog: () -> Unit = {}) {
                 }) { Text("Перевірити зараз") }
             }
 
+            Section("Паролі") {
+                val faceLock by app.settings.passwordsFaceLock.collectAsStateWithLifecycle()
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable {
+                    if (!decoy) app.settings.setPasswordsFaceLock(!faceLock)
+                }, verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Вхід у «Паролі» за обличчям")
+                        Text(
+                            "Окрема перевірка щоразу після розблокування додатку: обличчя, а якщо його не налаштовано — відбиток чи PIN телефона",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = faceLock, onCheckedChange = { if (!decoy) app.settings.setPasswordsFaceLock(it) })
+                }
+            }
+
             Section("Журнал доступу") {
                 NavRow(Icons.Filled.History, "Журнал доступу", "Коли відкривали додаток і хто помилявся з паролем", onAccessLog)
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable {

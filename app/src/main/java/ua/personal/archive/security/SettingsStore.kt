@@ -78,6 +78,11 @@ class SettingsStore(context: Context) {
     val lockOnScreenOff: StateFlow<Boolean> = _lockOnScreenOff.asStateFlow()
     fun setLockOnScreenOff(v: Boolean) { prefs.edit().putBoolean("lock_screen_off", v).apply(); _lockOnScreenOff.value = v }
 
+    private val _passwordsFaceLock = MutableStateFlow(prefs.getBoolean("passwords_face_lock", true))
+    /** Окреме підтвердження обличчям (або іншою біометрією / PIN пристрою) при вході в «Паролі». */
+    val passwordsFaceLock: StateFlow<Boolean> = _passwordsFaceLock.asStateFlow()
+    fun setPasswordsFaceLock(v: Boolean) { prefs.edit().putBoolean("passwords_face_lock", v).apply(); _passwordsFaceLock.value = v }
+
     private val _intruderPhoto = MutableStateFlow(prefs.getBoolean("intruder_photo", false))
     /** Фотографувати фронтальною камерою після неправильного пароля. */
     val intruderPhoto: StateFlow<Boolean> = _intruderPhoto.asStateFlow()

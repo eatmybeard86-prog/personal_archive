@@ -44,7 +44,12 @@ import java.util.zip.ZipOutputStream
  *      ├─ Особисті/Паспорт/скан.jpg
  *      └─ Нерухомість/Квартира/витяг.pdf
  */
-class BackupManager(private val context: Context, private val repo: VaultRepository) {
+class BackupManager(
+    private val context: Context,
+    private val repo: VaultRepository,
+    /** Паролі потрапляють лише в повну копію (усі розділи). */
+    private val passwords: PasswordVault? = null,
+) {
 
     @Serializable
     data class Manifest(
@@ -56,9 +61,13 @@ class BackupManager(private val context: Context, private val repo: VaultReposit
         val sections: List<Section> = emptyList(),
         /** id вкладення -> шлях у «Архів.zip» */
         val paths: Map<String, String>,
+        /** Записи розділу «Паролі» (лише в повній копії). */
+        val passwords: List<PasswordEntry> = emptyList(),
+        /** Власні розділи паролів. */
+        val passwordGroups: List<PasswordGroup> = emptyList(),
     )
 
-    data class ImportResult(val imported: Int, val skipped: Int, val files: Int)
+    data class ImportResult(val imported: Int, val skipped: Int, val files: Int, val passwords: Int = 0)
 
     class WrongPasswordException : Exception("Неправильний пароль")
     class NotABackupException : Exception("Це не резервна копія «Моїх документів»")
@@ -98,7 +107,10 @@ class BackupManager(private val context: Context, private val repo: VaultReposit
                 paths[a.id] = "$dir/$name"
             }
         }
+        val pw = if (categories == null && passwords != null) { passwords.load(); passwords.entries.value } else emptyList()
         val manifest = Manifest(
+            passwords = pw,
+            passwordGroups = if (pw.isNotEmpty()) passwords?.groups?.value.orEmpty() else emptyList(),
             createdAt = System.currentTimeMillis(),
             documents = docs.map { it.copy(section = it.sectionId) },
             sections = docs.map { it.sectionId }.distinct().map { repo.section(it) },
@@ -122,6 +134,12 @@ class BackupManager(private val context: Context, private val repo: VaultReposit
             inner.putNextEntry(ZipEntry("ПРОЧИТАЙ.txt"))
             inner.write(readme(manifest).toByteArray())
             inner.closeEntry()
+            if (pw.isNotEmpty()) {
+                // Читабельний список — на випадок, якщо додатку під рукою немає (архів однаково зашифрований паролем копії).
+                inner.putNextEntry(ZipEntry("Паролі.txt"))
+                inner.write(passwordsText(pw, passwords?.groups?.value.orEmpty()).toByteArray())
+                inner.closeEntry()
+            }
             inner.putNextEntry(ZipEntry(MANIFEST))
             inner.write(json.encodeToString(Manifest.serializer(), manifest).toByteArray())
             inner.closeEntry()
@@ -203,7 +221,8 @@ class BackupManager(private val context: Context, private val repo: VaultReposit
                 files += atts.size
                 repo.save(d.copy(attachments = atts))
             }
-            ImportResult(imported = wanted.size, skipped = skipped, files = files)
+            val pw = if (manifest.passwords.isNotEmpty() && passwords != null) passwords.merge(manifest.passwords, manifest.passwordGroups) else 0
+            ImportResult(imported = wanted.size, skipped = skipped, files = files, passwords = pw)
         } catch (e: Exception) {
             repo.discardAttachments(newAttachments.values.toList())
             throw e
@@ -242,7 +261,7 @@ class BackupManager(private val context: Context, private val repo: VaultReposit
     private fun readme(m: Manifest): String = buildString {
         appendLine("Резервна копія «Мої документи»")
         appendLine("Створено: ${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.ROOT).format(Date(m.createdAt))}")
-        appendLine("Документів: ${m.documents.size}, файлів: ${m.paths.size}")
+        appendLine("Документів: ${m.documents.size}, файлів: ${m.paths.size}" + if (m.passwords.isNotEmpty()) ", паролів: ${m.passwords.size}" else "")
         appendLine()
         appendLine("Файли розкладено по папках: Розділ / Документ / файли.")
         appendLine("Щоб повернути копію в додаток, відкрийте «Налаштування → Резервні копії → Відновити»")
@@ -256,6 +275,28 @@ class BackupManager(private val context: Context, private val repo: VaultReposit
                 d.expiresAt?.let { append(" — дійсний до ${SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(Date(it))}") }
                 appendLine()
                 if (d.note.isNotBlank()) appendLine("  ${d.note.replace("\n", "\n  ")}")
+            }
+            appendLine()
+        }
+    }
+
+    private fun passwordsText(list: List<PasswordEntry>, groups: List<PasswordGroup>): String = buildString {
+        val fmt = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT)
+        appendLine("Паролі — «Мої документи», ${fmt.format(Date())}")
+        appendLine()
+        val titles = PasswordCategory.entries.associate { it.name to it.title } + groups.associate { it.id to it.title }
+        list.filter { it.deletedAt == null }.groupBy { titles[it.category] ?: PasswordCategory.OTHER.title }.toSortedMap().forEach { (title, items) ->
+            appendLine("== $title ==")
+            items.sortedBy { it.title.lowercase() }.forEach { e ->
+                appendLine("• ${e.title}" + if (e.archived) " (архів)" else "")
+                if (e.login.isNotBlank()) appendLine("  Логін: ${e.login}")
+                if (e.password.isNotBlank()) appendLine("  Пароль: ${e.password}")
+                if (e.site.isNotBlank()) appendLine("  Адреса: ${e.site}")
+                if (e.protocol.isNotBlank() || e.port.isNotBlank()) appendLine("  Протокол / порт: ${e.protocol} ${e.port}".trimEnd())
+                if (e.phone.isNotBlank()) appendLine("  Телефон: ${e.phone}")
+                if (e.price.isNotBlank()) appendLine("  Вартість: ${e.price}" + if (e.period == "YEAR") " / рік" else " / міс.")
+                e.nextPayment?.let { appendLine("  Наступна оплата: ${fmt.format(Date(it))}") }
+                if (e.note.isNotBlank()) appendLine("  ${e.note.replace("\n", "\n  ")}")
             }
             appendLine()
         }
